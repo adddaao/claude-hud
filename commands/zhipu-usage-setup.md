@@ -69,7 +69,7 @@ Merge in the usage settings:
     "usageBarEnabled": true,
     "sevenDayThreshold": 0,
     "externalUsagePath": "<absolute path to usage-snapshot.json>",
-    "externalUsageFreshnessMs": 300000
+    "externalUsageFreshnessMs": 1800000
   }
 }
 ```
