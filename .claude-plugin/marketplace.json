@@ -12,9 +12,9 @@
     {
       "name": "claude-hud",
       "source": "./",
-      "description": "Real-time statusline showing context usage, active tools, running agents, and todo progress. Always visible below your input, zero config required.",
+      "description": "Real-time statusline showing context usage, active tools, running agents, and todo progress. Includes ZhipuAI usage display support.",
       "category": "monitoring",
-      "tags": ["hud", "statusline", "monitoring", "context", "tools", "agents", "todos"]
+      "tags": ["hud", "statusline", "monitoring", "context", "tools", "agents", "todos", "zhipuai"]
     }
   ]
 }
