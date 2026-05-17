@@ -30,9 +30,11 @@ export function renderUsageLine(
 
   const usageLabel = progressLabel("label.usage", colors, alignLabels);
 
-  if (ctx.usageData.balanceLabel) {
+  const hasUsageData = ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null;
+  if (!hasUsageData && ctx.usageData.balanceLabel) {
     return `${usageLabel} ${ctx.usageData.balanceLabel}`;
   }
+  const balancePrefix = ctx.usageData.balanceLabel ? `${ctx.usageData.balanceLabel} ` : '';
 
   const timeFormat: TimeFormatMode = display?.timeFormat ?? 'relative';
   const showResetLabel = display?.showResetLabel ?? true;
@@ -62,6 +64,9 @@ export function renderUsageLine(
 
   const effectiveUsage = Math.max(fiveHour ?? 0, sevenDay ?? 0);
   if (effectiveUsage < threshold) {
+    if (ctx.usageData.balanceLabel) {
+      return `${usageLabel} ${ctx.usageData.balanceLabel}`;
+    }
     return null;
   }
 
@@ -76,9 +81,13 @@ export function renderUsageLine(
       : null;
 
     if (fiveHourPart && sevenDayPart) {
-      return `${fiveHourPart} | ${sevenDayPart}`;
+      return `${usageLabel} ${balancePrefix}${fiveHourPart} | ${sevenDayPart}`;
     }
-    return fiveHourPart ?? sevenDayPart ?? null;
+    return fiveHourPart
+      ? `${usageLabel} ${balancePrefix}${fiveHourPart}`
+      : sevenDayPart
+        ? `${usageLabel} ${balancePrefix}${sevenDayPart}`
+        : null;
   }
 
   const usageBarEnabled = display?.usageBarEnabled ?? true;
@@ -99,7 +108,7 @@ export function renderUsageLine(
       alignLabels,
       usageValueMode,
     });
-    return `${usageLabel} ${weeklyOnlyPart}`;
+    return `${usageLabel} ${balancePrefix}${weeklyOnlyPart}`;
   }
 
   const fiveHourPart = formatUsageWindowPart({
@@ -129,10 +138,10 @@ export function renderUsageLine(
       alignLabels,
       usageValueMode,
     });
-    return `${usageLabel} ${fiveHourPart} | ${sevenDayPart}`;
+    return `${usageLabel} ${balancePrefix}${fiveHourPart} | ${sevenDayPart}`;
   }
 
-  return `${usageLabel} ${fiveHourPart}`;
+  return `${usageLabel} ${balancePrefix}${fiveHourPart}`;
 }
 
 function formatCompactWindowPart(

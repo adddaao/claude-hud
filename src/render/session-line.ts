@@ -168,7 +168,9 @@ export function renderSessionLine(ctx: RenderContext): string {
     const showResetLabel = display?.showResetLabel ?? true;
     const usageValueMode = display?.usageValue ?? 'percent';
 
-    if (ctx.usageData.balanceLabel) {
+    const hasUsageData = ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null;
+    const balancePrefix = ctx.usageData.balanceLabel ? `${ctx.usageData.balanceLabel} ` : '';
+    if (!hasUsageData && ctx.usageData.balanceLabel) {
       parts.push(`${label(t('label.usage'), colors)} ${ctx.usageData.balanceLabel}`);
     } else if (isLimitReached(ctx.usageData)) {
       const resetTime = ctx.usageData.fiveHour === 100
@@ -202,12 +204,12 @@ export function renderSessionLine(ctx: RenderContext): string {
             : null;
 
           if (fiveHourPart && sevenDayPart) {
-            parts.push(fiveHourPart);
+            parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${fiveHourPart}`);
             parts.push(sevenDayPart);
           } else if (fiveHourPart) {
-            parts.push(fiveHourPart);
+            parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${fiveHourPart}`);
           } else if (sevenDayPart) {
-            parts.push(sevenDayPart);
+            parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${sevenDayPart}`);
           }
         } else if (fiveHour === null && sevenDay !== null) {
           const weeklyOnlyPart = formatUsageWindowPart({
@@ -222,7 +224,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             forceLabel: true,
             usageValueMode,
           });
-          parts.push(weeklyOnlyPart);
+          parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${weeklyOnlyPart}`);
         } else {
           const fiveHourPart = formatUsageWindowPart({
             label: '5h',
@@ -250,12 +252,14 @@ export function renderSessionLine(ctx: RenderContext): string {
               forceLabel: true,
               usageValueMode,
             });
-            parts.push(`${label(t('label.usage'), colors)} ${fiveHourPart}`);
+            parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${fiveHourPart}`);
             parts.push(sevenDayPart);
           } else {
-            parts.push(`${label(t('label.usage'), colors)} ${fiveHourPart}`);
+            parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${fiveHourPart}`);
           }
         }
+      } else if (ctx.usageData.balanceLabel) {
+        parts.push(`${label(t('label.usage'), colors)} ${ctx.usageData.balanceLabel}`);
       }
     }
   }

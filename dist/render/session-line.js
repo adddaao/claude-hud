@@ -152,7 +152,9 @@ export function renderSessionLine(ctx) {
         const usageCompact = display?.usageCompact ?? false;
         const showResetLabel = display?.showResetLabel ?? true;
         const usageValueMode = display?.usageValue ?? 'percent';
-        if (ctx.usageData.balanceLabel) {
+        const hasUsageData = ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null;
+        const balancePrefix = ctx.usageData.balanceLabel ? `${ctx.usageData.balanceLabel} ` : '';
+        if (!hasUsageData && ctx.usageData.balanceLabel) {
             parts.push(`${label(t('label.usage'), colors)} ${ctx.usageData.balanceLabel}`);
         }
         else if (isLimitReached(ctx.usageData)) {
@@ -187,14 +189,14 @@ export function renderSessionLine(ctx) {
                         ? formatCompactWindowPart('7d', sevenDay, ctx.usageData.sevenDayResetAt, timeFormat, colors, usageValueMode)
                         : null;
                     if (fiveHourPart && sevenDayPart) {
-                        parts.push(fiveHourPart);
+                        parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${fiveHourPart}`);
                         parts.push(sevenDayPart);
                     }
                     else if (fiveHourPart) {
-                        parts.push(fiveHourPart);
+                        parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${fiveHourPart}`);
                     }
                     else if (sevenDayPart) {
-                        parts.push(sevenDayPart);
+                        parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${sevenDayPart}`);
                     }
                 }
                 else if (fiveHour === null && sevenDay !== null) {
@@ -210,7 +212,7 @@ export function renderSessionLine(ctx) {
                         forceLabel: true,
                         usageValueMode,
                     });
-                    parts.push(weeklyOnlyPart);
+                    parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${weeklyOnlyPart}`);
                 }
                 else {
                     const fiveHourPart = formatUsageWindowPart({
@@ -238,13 +240,16 @@ export function renderSessionLine(ctx) {
                             forceLabel: true,
                             usageValueMode,
                         });
-                        parts.push(`${label(t('label.usage'), colors)} ${fiveHourPart}`);
+                        parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${fiveHourPart}`);
                         parts.push(sevenDayPart);
                     }
                     else {
-                        parts.push(`${label(t('label.usage'), colors)} ${fiveHourPart}`);
+                        parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${fiveHourPart}`);
                     }
                 }
+            }
+            else if (ctx.usageData.balanceLabel) {
+                parts.push(`${label(t('label.usage'), colors)} ${ctx.usageData.balanceLabel}`);
             }
         }
     }
