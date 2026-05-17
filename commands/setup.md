@@ -366,6 +366,114 @@ Merge with existing config if the file already exists. Only write keys the user 
 
 ---
 
+## Step 4.5: Auto-detect ZhipuAI (Optional)
+
+After writing config, automatically check if the user is on ZhipuAI and configure usage display.
+
+**macOS/Linux**:
+```bash
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+SETTINGS="$CLAUDE_DIR/settings.json"
+
+# Detect ZhipuAI
+BASE_URL=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS','utf8')); console.log(s.env?.ANTHROPIC_BASE_URL || '')" 2>/dev/null || echo "")
+API_KEY=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS','utf8')); console.log(s.env?.ANTHROPIC_API_KEY || '')" 2>/dev/null || echo "")
+
+if echo "$BASE_URL" | grep -qi 'bigmodel\|z\.ai'; then
+  echo "ZHIPUAI_DETECTED=true"
+  echo "API_KEY_PRESENT=$([ -n "$API_KEY" ] && echo 'yes' || echo 'no')"
+else
+  echo "ZHIPUAI_DETECTED=false"
+fi
+```
+
+**If `ZHIPUAI_DETECTED=false`**: Skip this step entirely. Continue to Step 5.
+
+**If `ZHIPUAI_DETECTED=true` and `API_KEY_PRESENT=yes`**: Auto-configure ZhipuAI usage display. Tell the user "Detected ZhipuAI — configuring usage display..." and proceed with the sub-steps below. Do NOT ask for the API key.
+
+**If `ZHIPUAI_DETECTED=true` and `API_KEY_PRESENT=no`**: Ask the user:
+- header: "ZhipuAI"
+- question: "Detected ZhipuAI but no API key found. Enter your key to enable usage display, or skip."
+- Options: let them type the key or say "skip"
+
+If they skip, continue to Step 5.
+
+### ZhipuAI auto-configure sub-steps
+
+**4.5a: Copy fetch script**
+
+```bash
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+PLUGIN_DIR=$(ls -d "$CLAUDE_DIR"/plugins/cache/*/claude-hud/*/ 2>/dev/null | sort -V | tail -1)
+SCRIPT_DEST="$CLAUDE_DIR/plugins/claude-hud"
+mkdir -p "$SCRIPT_DEST"
+
+FETCH_SCRIPT="$PLUGIN_DIR/scripts/fetch-zhipu-usage.sh"
+if [ -f "$FETCH_SCRIPT" ]; then
+  cp "$FETCH_SCRIPT" "$SCRIPT_DEST/fetch-zhipu-usage.sh"
+  chmod +x "$SCRIPT_DEST/fetch-zhipu-usage.sh"
+  echo "OK: fetch script installed"
+else
+  echo "WARN: fetch script not found in plugin, skipping"
+fi
+```
+
+**4.5b: Test API connection**
+
+```bash
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+ZHIPU_API_KEY="$API_KEY" "$CLAUDE_DIR/plugins/claude-hud/fetch-zhipu-usage.sh" 2>/dev/null && echo "OK: API connected" || echo "WARN: API test failed"
+```
+
+If the test fails, warn the user but continue — it may work after restart.
+
+**4.5c: Update config.json** (merge with what was written in Step 4)
+
+Add to the existing `plugins/claude-hud/config.json`:
+
+```json
+{
+  "display": {
+    "showUsage": true,
+    "usageBarEnabled": true,
+    "sevenDayThreshold": 0,
+    "externalUsagePath": "<absolute path>",
+    "externalUsageFreshnessMs": 1800000
+  }
+}
+```
+
+Replace `<absolute path>` with the fully expanded path: `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/usage-snapshot.json` (no `~`).
+
+**4.5d: Update settings.json** (merge with what was written in Step 3)
+
+Add to the existing settings:
+
+1. Add `ZHIPU_API_KEY` to `env` (same value as the detected key):
+```json
+{ "env": { "ZHIPU_API_KEY": "<the key>" } }
+```
+
+2. Add the fetch hook to `hooks.PreToolUse`. If a PreToolUse entry with matcher `Bash|Read|Write|Edit` already exists, append the hook to its `hooks` array. Otherwise add the full entry:
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Bash|Read|Write|Edit",
+      "hooks": [{
+        "type": "command",
+        "command": "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/fetch-zhipu-usage.sh",
+        "async": true
+      }]
+    }]
+  }
+}
+```
+
+After completing these sub-steps, tell the user: "ZhipuAI usage display configured — 5h and 7d quota bars will appear in the HUD."
+
+---
+
 ## Step 5: Verify & Finish
 
 **First, confirm the user has restarted Claude Code** since Step 3 wrote the config. If they haven't, ask them to restart before proceeding — the HUD cannot appear in the same session where setup was run.
