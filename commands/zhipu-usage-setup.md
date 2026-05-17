@@ -1,22 +1,35 @@
 ---
-description: Configure ZhipuAI usage display in claude-hud
+description: Configure ZhipuAI usage display in claude-hud (auto-detect API key)
 allowed-tools: Bash, Read, Edit, AskUserQuestion
 ---
 
 ## ZhipuAI Usage Setup
 
-This command configures claude-hud to display ZhipuAI (智谱) 5-hour and 7-day usage quotas.
+This command auto-detects ZhipuAI configuration and sets up usage display in one step.
 
-### Step 1: Get API Key
+### Step 1: Auto-detect ZhipuAI
 
-Ask the user for their ZhipuAI API key.
+Check if the user is using ZhipuAI by reading settings:
 
-Use AskUserQuestion:
+```bash
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+SETTINGS="$CLAUDE_DIR/settings.json"
+
+# Detect ZhipuAI from ANTHROPIC_BASE_URL
+BASE_URL=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS','utf8')); console.log(s.env?.ANTHROPIC_BASE_URL || '')" 2>/dev/null)
+echo "Base URL: $BASE_URL"
+
+# Get API key (reuse ANTHROPIC_API_KEY for ZhipuAI usage API)
+API_KEY=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS','utf8')); console.log(s.env?.ANTHROPIC_API_KEY || '')" 2>/dev/null)
+echo "API key found: $([ -n "$API_KEY" ] && echo 'yes' || echo 'no')"
+```
+
+**If `BASE_URL` does NOT contain `bigmodel` or `z.ai`**: This setup only applies to ZhipuAI users. Tell the user this command is for ZhipuAI accounts and stop.
+
+**If `API_KEY` is empty**: Fall back to asking the user. Use AskUserQuestion:
 - header: "API Key"
-- question: "Enter your ZhipuAI API key (from open.bigmodel.cn):"
-- options are not suitable here, use free text input
-
-If the user says skip or cancel, stop here.
+- question: "No ANTHROPIC_API_KEY found in settings. Enter your ZhipuAI API key:"
+- Options are not suitable, use free text input
 
 ### Step 2: Detect Plugin Install Path
 
@@ -26,7 +39,7 @@ PLUGIN_DIR=$(ls -d "$CLAUDE_DIR"/plugins/cache/*/claude-hud/*/ 2>/dev/null | sor
 echo "Plugin dir: $PLUGIN_DIR"
 ```
 
-If empty, the plugin is not installed. Ask user to run `/plugin install claude-hud` first.
+If empty, the plugin is not installed. Ask user to run `/plugin install claude-hud` first, then re-run this command.
 
 ### Step 3: Copy fetch script
 
@@ -35,13 +48,12 @@ CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SCRIPT_DEST="$CLAUDE_DIR/plugins/claude-hud"
 mkdir -p "$SCRIPT_DEST"
 
-# Find the fetch script from plugin installation
 FETCH_SCRIPT=$(ls "$PLUGIN_DIR"scripts/fetch-zhipu-usage.sh 2>/dev/null || echo "")
 
 if [ -n "$FETCH_SCRIPT" ]; then
   cp "$FETCH_SCRIPT" "$SCRIPT_DEST/fetch-zhipu-usage.sh"
   chmod +x "$SCRIPT_DEST/fetch-zhipu-usage.sh"
-  echo "Copied fetch script to $SCRIPT_DEST/fetch-zhipu-usage.sh"
+  echo "OK: fetch script installed"
 else
   echo "ERROR: fetch-zhipu-usage.sh not found in plugin"
   exit 1
@@ -52,15 +64,15 @@ fi
 
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-ZHIPU_API_KEY="<user's API key>" "$CLAUDE_DIR/plugins/claude-hud/fetch-zhipu-usage.sh" && cat "$CLAUDE_DIR/plugins/claude-hud/usage-snapshot.json"
+ZHIPU_API_KEY="$API_KEY" "$CLAUDE_DIR/plugins/claude-hud/fetch-zhipu-usage.sh" && echo "OK: API connected" && cat "$CLAUDE_DIR/plugins/claude-hud/usage-snapshot.json"
 ```
 
-If this fails, check the API key and ask the user to verify.
+If this fails, the API key may be wrong. Ask the user to verify.
 
 ### Step 5: Update config.json
 
-Read the existing config at `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/config.json` (create if missing).
-Merge in the usage settings:
+Read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/config.json` (create if missing).
+Merge in:
 
 ```json
 {
@@ -74,24 +86,15 @@ Merge in the usage settings:
 }
 ```
 
-Replace `<absolute path>` with `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/usage-snapshot.json` (expanded, no `~`).
+Replace `<absolute path>` with the fully expanded path (use `$CLAUDE_DIR/plugins/claude-hud/usage-snapshot.json`, no `~`).
 
 ### Step 6: Update settings.json
 
-Read the existing settings at `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json`.
-Merge in:
+Read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json`.
 
-1. Add `ZHIPU_API_KEY` to `env`:
+1. **Ensure `ZHIPU_API_KEY` is in `env`** — if `ANTHROPIC_API_KEY` is already set, add `ZHIPU_API_KEY` with the same value. Merge with existing env, do not replace.
 
-```json
-{
-  "env": {
-    "ZHIPU_API_KEY": "<user's API key>"
-  }
-}
-```
-
-2. Add or update the `PreToolUse` hook to run the fetch script:
+2. **Add PreToolUse hook** — add to existing hooks array, do not replace:
 
 ```json
 {
@@ -112,11 +115,8 @@ Merge in:
 }
 ```
 
-**Important**: Merge with existing hooks/env, do not replace. If a PreToolUse hook with the same matcher already exists, append to the hooks array or add alongside existing entries.
+If a PreToolUse entry with matcher `Bash|Read|Write|Edit` already exists, check if the fetch script hook is already in its `hooks` array. If not, append it. If the matcher doesn't exist, add the full entry.
 
 ### Step 7: Confirm
 
-Tell the user:
-
-> ZhipuAI usage display configured. Restart Claude Code to apply changes.
-> The HUD will show 5-hour and 7-day usage bars with your quota level.
+> ZhipuAI usage display configured! Restart Claude Code to apply changes. The HUD will show 5-hour and 7-day usage bars with your quota level.
