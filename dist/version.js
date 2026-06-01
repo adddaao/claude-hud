@@ -193,6 +193,7 @@ export async function getClaudeCodeVersion() {
         const { stdout } = await execFileImpl(invocation.file, invocation.args, {
             timeout: 2000,
             encoding: 'utf8',
+            windowsHide: true,
         });
         cachedVersion = _parseClaudeCodeVersion(stdout);
     }

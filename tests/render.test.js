@@ -5,10 +5,11 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { render } from '../dist/render/index.js';
+import { mergeConfig } from '../dist/config.js';
 import { renderSessionLine } from '../dist/render/session-line.js';
 import { renderProjectLine, renderGitFilesLine } from '../dist/render/lines/project.js';
 import { renderPromptCacheLine } from '../dist/render/lines/prompt-cache.js';
-import { renderToolsLine } from '../dist/render/tools-line.js';
+import { renderToolsLine, shortenToolName } from '../dist/render/tools-line.js';
 import { renderAgentsLine } from '../dist/render/agents-line.js';
 import { renderTodosLine } from '../dist/render/todos-line.js';
 import { renderUsageLine } from '../dist/render/lines/usage.js';
@@ -472,6 +473,28 @@ test('renderSessionLine includes customLine when configured', () => {
   assert.ok(line.includes('Ship it'));
 });
 
+test('renderSessionLine places customLine before model badge when position is first', () => {
+  const ctx = baseContext();
+  ctx.config.display.customLine = 'prod-server';
+  ctx.config.display.customLinePosition = 'first';
+  const line = stripAnsi(renderSessionLine(ctx));
+  const customIdx = line.indexOf('prod-server');
+  const modelIdx = line.indexOf('[Opus]');
+  assert.ok(customIdx >= 0, 'should include custom line');
+  assert.ok(modelIdx >= 0, 'should include model badge');
+  assert.ok(customIdx < modelIdx, `custom line (${customIdx}) should appear before model badge (${modelIdx})`);
+});
+
+test('renderSessionLine places customLine at end when position is last', () => {
+  const ctx = baseContext();
+  ctx.config.display.customLine = 'prod-server';
+  ctx.config.display.customLinePosition = 'last';
+  const line = stripAnsi(renderSessionLine(ctx));
+  const customIdx = line.indexOf('prod-server');
+  const modelIdx = line.indexOf('[Opus]');
+  assert.ok(customIdx > modelIdx, 'custom line should appear after model badge when position is last');
+});
+
 test('renderSessionLine applies modelFormat compact', () => {
   const ctx = baseContext();
   ctx.stdin.model = { display_name: 'Opus 4.6 (1M context)' };
@@ -569,6 +592,30 @@ test('renderProjectLine includes customLine when configured', () => {
   ctx.config.display.customLine = 'Stay sharp';
   const line = stripAnsi(renderProjectLine(ctx) ?? '');
   assert.ok(line.includes('Stay sharp'));
+});
+
+test('renderProjectLine places customLine before model badge when position is first', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = '/tmp/my-project';
+  ctx.config.display.customLine = 'prod-server';
+  ctx.config.display.customLinePosition = 'first';
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  const customIdx = line.indexOf('prod-server');
+  const modelIdx = line.indexOf('[Opus]');
+  assert.ok(customIdx >= 0, 'should include custom line');
+  assert.ok(modelIdx >= 0, 'should include model badge');
+  assert.ok(customIdx < modelIdx, `custom line (${customIdx}) should appear before model badge (${modelIdx})`);
+});
+
+test('renderProjectLine places customLine at end when position is last', () => {
+  const ctx = baseContext();
+  ctx.stdin.cwd = '/tmp/my-project';
+  ctx.config.display.customLine = 'prod-server';
+  ctx.config.display.customLinePosition = 'last';
+  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  const customIdx = line.indexOf('prod-server');
+  const modelIdx = line.indexOf('[Opus]');
+  assert.ok(customIdx > modelIdx, 'custom line should appear after model badge when position is last');
 });
 
 test('renderProjectLine applies modelFormat compact (strips context suffix)', () => {
@@ -900,6 +947,124 @@ test('renderToolsLine renders running and completed tools', () => {
   assert.ok(line?.includes('.../authentication.ts'));
 });
 
+test('renderToolsLine keeps default tool cap and full names', () => {
+  const ctx = baseContext();
+  ctx.transcript.tools = [
+    { id: 'tool-1', name: 'mcp__plugin_context-mode_context-mode__ctx_batch_execute', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-2', name: 'ToolSearch', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-3', name: 'Read', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-4', name: 'Edit', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-5', name: 'Write', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+  ];
+
+  const line = stripAnsi(renderToolsLine(ctx) ?? '');
+  assert.ok(line.includes('mcp__plugin_context-mode_context-mode__ctx_batch_execute'));
+  assert.ok(!line.includes('Write ×1'));
+});
+
+test('shortenToolName shortens MCP names to the final segment', () => {
+  assert.equal(
+    shortenToolName('mcp__plugin_context-mode_context-mode__ctx_batch_execute', 20),
+    'ctx_batch_execute'
+  );
+});
+
+test('shortenToolName truncates non-MCP names with an ellipsis', () => {
+  assert.equal(shortenToolName('ToolSearch', 5), 'Tool…');
+});
+
+test('shortenToolName truncates long MCP final segments', () => {
+  assert.equal(shortenToolName('mcp__plugin__execute_long_name', 5), 'exec…');
+});
+
+test('shortenToolName handles very small max lengths', () => {
+  assert.equal(shortenToolName('ToolSearch', 1), '…');
+});
+
+test('renderToolsLine renders colliding shortened MCP names separately', () => {
+  const ctx = baseContext();
+  ctx.config.display.toolNameMaxLength = 20;
+  ctx.transcript.tools = [
+    { id: 'tool-1', name: 'mcp__a__run', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-2', name: 'mcp__b__run', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+  ];
+
+  const line = stripAnsi(renderToolsLine(ctx) ?? '');
+  assert.equal((line.match(/run ×1/g) ?? []).length, 2);
+});
+
+test('renderToolsLine respects toolsMaxVisible and preserves overflow indicator', () => {
+  const ctx = baseContext();
+  ctx.config.display.toolsMaxVisible = 2;
+  ctx.transcript.tools = [
+    { id: 'tool-1', name: 'Read', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-2', name: 'Edit', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-3', name: 'Write', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-4', name: 'Bash', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+  ];
+
+  const line = stripAnsi(renderToolsLine(ctx) ?? '');
+  assert.ok(line.includes('Read ×1'));
+  assert.ok(line.includes('Edit ×1'));
+  assert.ok(!line.includes('Write ×1'));
+  assert.ok(!line.includes('Bash ×1'));
+  assert.ok(line.includes('+2 more'));
+});
+
+test('render wraps all completed tools when toolsMaxVisible is unlimited', () => {
+  const ctx = baseContext();
+  ctx.config.lineLayout = 'compact';
+  ctx.config.display.toolsMaxVisible = 0;
+  ctx.config.display.showContextBar = false;
+  ctx.config.display.showConfigCounts = false;
+  ctx.config.display.showUsage = false;
+  ctx.transcript.tools = [
+    { id: 'tool-1', name: 'Read', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-2', name: 'Edit', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-3', name: 'Write', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-4', name: 'Bash', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+    { id: 'tool-5', name: 'ToolSearch', status: 'completed', startTime: new Date(0), endTime: new Date(0) },
+  ];
+
+  let lines = [];
+  withTerminal(24, () => {
+    lines = captureRenderLines(ctx);
+  });
+
+  assert.ok(lines.length > 1, 'expected the tools line to wrap on a narrow terminal');
+  assert.ok(lines.some(line => line.includes('ToolSearch ×1')));
+  assert.ok(!lines.some(line => line.includes('more')));
+});
+
+test('renderToolsLine preserves running targets and path truncation with shortened tool names', () => {
+  const ctx = baseContext();
+  ctx.config.display.toolNameMaxLength = 4;
+  ctx.transcript.tools = [
+    {
+      id: 'tool-1',
+      name: 'mcp__plugin__long_running_tool',
+      target: '/tmp/very/long/path/to/authentication.ts',
+      status: 'running',
+      startTime: new Date(0),
+    },
+  ];
+
+  const line = stripAnsi(renderToolsLine(ctx) ?? '');
+  assert.ok(line.includes('lon…'));
+  assert.ok(line.includes('.../authentication.ts'));
+});
+
+test('mergeConfig validates tool display counts as non-negative integers', () => {
+  assert.equal(mergeConfig({ display: { toolNameMaxLength: 12 } }).display.toolNameMaxLength, 12);
+  assert.equal(mergeConfig({ display: { toolsMaxVisible: 0 } }).display.toolsMaxVisible, 0);
+  assert.equal(mergeConfig({ display: { toolsMaxVisible: 2 } }).display.toolsMaxVisible, 2);
+
+  for (const value of [-1, 'abc', null, 1.5]) {
+    assert.equal(mergeConfig({ display: { toolNameMaxLength: value } }).display.toolNameMaxLength, 0);
+    assert.equal(mergeConfig({ display: { toolsMaxVisible: value } }).display.toolsMaxVisible, 4);
+  }
+});
+
 test('renderToolsLine truncates long filenames', () => {
   const ctx = baseContext();
   ctx.transcript.tools = [
@@ -1108,6 +1273,16 @@ test('renderTodosLine truncates long todo content', () => {
   ];
   const line = renderTodosLine(ctx);
   assert.ok(line?.includes('...'));
+});
+
+test('renderTodosLine tolerates missing in-progress todo content', () => {
+  const ctx = baseContext();
+  ctx.transcript.todos = [
+    { status: 'in_progress' },
+  ];
+
+  assert.doesNotThrow(() => renderTodosLine(ctx));
+  assert.ok(renderTodosLine(ctx)?.includes('(0/1)'));
 });
 
 test('renderTodosLine returns null when no todos exist', () => {
@@ -2393,6 +2568,127 @@ test('renderUsageLine shows relative and absolute time when timeFormat is "both"
   assert.match(plain, /\dh/, 'should contain relative duration hours');
   assert.ok(plain.includes(' at '), `should contain absolute "at" prefix, got: ${plain}`);
   assert.ok(plain.includes('resets in'), `should use "resets in" preposition for both mode, got: ${plain}`);
+});
+
+test('renderUsageLine shows elapsed 5h window percentage when timeFormat is "elapsed"', () => {
+  const ctx = baseContext();
+  const now = Date.now();
+  ctx.config.display.usageBarEnabled = false;
+  ctx.config.display.timeFormat = 'elapsed';
+  ctx.usageData = {
+    planName: 'Pro',
+    fiveHour: 31,
+    sevenDay: 20,
+    fiveHourResetAt: new Date(now + 4 * 60 * 60 * 1000),
+    sevenDayResetAt: null,
+  };
+
+  const plain = stripAnsi(renderUsageLine(ctx));
+  assert.ok(plain.includes('Usage 5h 31% (20% elapsed)'), `expected elapsed window percentage, got: ${plain}`);
+  assert.ok(!plain.includes('resets'), `elapsed mode should not include reset wording, got: ${plain}`);
+});
+
+test('renderUsageLine shows elapsed 5h percentage and reset clock when timeFormat is "elapsedAndAbsolute"', () => {
+  const ctx = baseContext();
+  const now = Date.now();
+  ctx.config.display.usageBarEnabled = false;
+  ctx.config.display.timeFormat = 'elapsedAndAbsolute';
+  ctx.usageData = {
+    planName: 'Pro',
+    fiveHour: 31,
+    sevenDay: 20,
+    fiveHourResetAt: new Date(now + 4 * 60 * 60 * 1000),
+    sevenDayResetAt: null,
+  };
+
+  const plain = stripAnsi(renderUsageLine(ctx));
+  assert.match(plain, /Usage 5h 31% \(20% elapsed, at .+\)/, `expected elapsed percentage with absolute reset clock, got: ${plain}`);
+  assert.ok(!plain.includes('resets'), `elapsedAndAbsolute mode should not include reset wording, got: ${plain}`);
+});
+
+test('renderUsageLine rounds elapsed 7d window percentage', () => {
+  const ctx = baseContext();
+  const now = Date.now();
+  ctx.config.display.usageBarEnabled = false;
+  ctx.config.display.timeFormat = 'elapsed';
+  ctx.usageData = {
+    planName: 'Pro',
+    fiveHour: null,
+    sevenDay: 85,
+    fiveHourResetAt: null,
+    sevenDayResetAt: new Date(now + 5.5 * 24 * 60 * 60 * 1000),
+  };
+
+  const plain = stripAnsi(renderUsageLine(ctx));
+  assert.ok(plain.includes('Weekly 85% (21% elapsed)'), `expected rounded weekly elapsed percentage, got: ${plain}`);
+});
+
+test('renderUsageLine clamps elapsed window percentage to 100 at the reset boundary', () => {
+  const ctx = baseContext();
+  ctx.config.display.usageBarEnabled = false;
+  ctx.config.display.timeFormat = 'elapsed';
+  ctx.usageData = {
+    planName: 'Pro',
+    fiveHour: 31,
+    sevenDay: 20,
+    fiveHourResetAt: new Date(Date.now() - 1000),
+    sevenDayResetAt: null,
+  };
+
+  const plain = stripAnsi(renderUsageLine(ctx));
+  assert.ok(plain.includes('Usage 5h 31% (100% elapsed)'), `expected clamped elapsed percentage, got: ${plain}`);
+});
+
+test('renderUsageLine clamps elapsed window percentage to 0 when the window has not started', () => {
+  const ctx = baseContext();
+  ctx.config.display.usageBarEnabled = false;
+  ctx.config.display.timeFormat = 'elapsed';
+  ctx.usageData = {
+    planName: 'Pro',
+    fiveHour: 31,
+    sevenDay: 20,
+    fiveHourResetAt: new Date(Date.now() + 6 * 60 * 60 * 1000),
+    sevenDayResetAt: null,
+  };
+
+  const plain = stripAnsi(renderUsageLine(ctx));
+  assert.ok(plain.includes('Usage 5h 31% (0% elapsed)'), `expected non-negative elapsed percentage, got: ${plain}`);
+});
+
+test('renderUsageLine keeps reset label hidden in elapsedAndAbsolute mode when disabled', () => {
+  const ctx = baseContext();
+  const now = Date.now();
+  ctx.config.display.usageBarEnabled = false;
+  ctx.config.display.showResetLabel = false;
+  ctx.config.display.timeFormat = 'elapsedAndAbsolute';
+  ctx.usageData = {
+    planName: 'Pro',
+    fiveHour: 31,
+    sevenDay: 20,
+    fiveHourResetAt: new Date(now + 4 * 60 * 60 * 1000),
+    sevenDayResetAt: null,
+  };
+
+  const plain = stripAnsi(renderUsageLine(ctx));
+  assert.match(plain, /Usage 5h 31% \(20% elapsed, at .+\)/, `expected elapsed percentage with bare absolute reset clock, got: ${plain}`);
+  assert.ok(!plain.includes('resets'), `reset wording should stay hidden, got: ${plain}`);
+});
+
+test('renderUsageLine falls back to relative reset formatting for invalid timeFormat values', () => {
+  const ctx = baseContext();
+  ctx.config.display.usageBarEnabled = false;
+  ctx.config.display.timeFormat = 'invalid-value';
+  ctx.usageData = {
+    planName: 'Pro',
+    fiveHour: 31,
+    sevenDay: 20,
+    fiveHourResetAt: new Date(Date.now() + 4 * 60 * 60 * 1000),
+    sevenDayResetAt: null,
+  };
+
+  const plain = stripAnsi(renderUsageLine(ctx));
+  assert.ok(plain.includes('resets in'), `invalid timeFormat should use relative reset wording, got: ${plain}`);
+  assert.ok(!plain.includes('elapsed'), `invalid timeFormat should not use elapsed mode, got: ${plain}`);
 });
 
 test('renderUsageLine limit-reached uses "resets in" for default relative mode', () => {

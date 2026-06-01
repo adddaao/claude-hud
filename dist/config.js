@@ -54,6 +54,8 @@ export const DEFAULT_CONFIG = {
         showResetLabel: true,
         usageCompact: false,
         showTools: false,
+        toolNameMaxLength: 0,
+        toolsMaxVisible: 4,
         showAgents: false,
         showTodos: false,
         showSessionName: false,
@@ -74,10 +76,12 @@ export const DEFAULT_CONFIG = {
         sevenDayThreshold: 80,
         environmentThreshold: 0,
         externalUsagePath: '',
+        externalUsageWritePath: '',
         externalUsageFreshnessMs: 300000,
         modelFormat: 'full',
         modelOverride: '',
         customLine: '',
+        customLinePosition: 'last',
         timeFormat: 'relative',
     },
     colors: {
@@ -119,13 +123,20 @@ function validateUsageValue(value) {
     return value === 'percent' || value === 'remaining';
 }
 function validateLanguage(value) {
-    return value === 'en' || value === 'zh';
+    return value === 'en' || value === 'zh' || value === 'zh-Hans';
 }
 function validateModelFormat(value) {
     return value === 'full' || value === 'compact' || value === 'short';
 }
 function validateTimeFormat(value) {
-    return value === 'relative' || value === 'absolute' || value === 'both';
+    return value === 'relative'
+        || value === 'absolute'
+        || value === 'both'
+        || value === 'elapsed'
+        || value === 'elapsedAndAbsolute';
+}
+function validateCustomLinePosition(value) {
+    return value === 'first' || value === 'last';
 }
 function validateColorName(value) {
     return value === 'dim'
@@ -268,6 +279,12 @@ function validateDurationSeconds(value, fallback) {
     }
     return Math.floor(value);
 }
+function validateNonNegativeInteger(value, fallback) {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+        return fallback;
+    }
+    return value;
+}
 function validateOptionalPath(value) {
     return typeof value === 'string' ? value.trim() : '';
 }
@@ -370,6 +387,8 @@ export function mergeConfig(userConfig) {
         showTools: typeof migrated.display?.showTools === 'boolean'
             ? migrated.display.showTools
             : DEFAULT_CONFIG.display.showTools,
+        toolNameMaxLength: validateNonNegativeInteger(migrated.display?.toolNameMaxLength, DEFAULT_CONFIG.display.toolNameMaxLength),
+        toolsMaxVisible: validateNonNegativeInteger(migrated.display?.toolsMaxVisible, DEFAULT_CONFIG.display.toolsMaxVisible),
         showAgents: typeof migrated.display?.showAgents === 'boolean'
             ? migrated.display.showAgents
             : DEFAULT_CONFIG.display.showAgents,
@@ -414,6 +433,7 @@ export function mergeConfig(userConfig) {
         sevenDayThreshold: validateThreshold(migrated.display?.sevenDayThreshold, 100),
         environmentThreshold: validateThreshold(migrated.display?.environmentThreshold, 100),
         externalUsagePath: validateOptionalPath(migrated.display?.externalUsagePath),
+        externalUsageWritePath: validateOptionalPath(migrated.display?.externalUsageWritePath),
         externalUsageFreshnessMs: validateFreshnessMs(migrated.display?.externalUsageFreshnessMs),
         modelFormat: validateModelFormat(migrated.display?.modelFormat)
             ? migrated.display.modelFormat
@@ -424,6 +444,9 @@ export function mergeConfig(userConfig) {
         customLine: typeof migrated.display?.customLine === 'string'
             ? migrated.display.customLine.slice(0, 80)
             : DEFAULT_CONFIG.display.customLine,
+        customLinePosition: validateCustomLinePosition(migrated.display?.customLinePosition)
+            ? migrated.display.customLinePosition
+            : DEFAULT_CONFIG.display.customLinePosition,
         timeFormat: validateTimeFormat(migrated.display?.timeFormat)
             ? migrated.display.timeFormat
             : DEFAULT_CONFIG.display.timeFormat,

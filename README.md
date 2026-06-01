@@ -150,13 +150,13 @@ Edit `~/.claude/plugins/claude-hud/config.json` directly for advanced settings s
 preserves those manual settings while still letting you change `language`, layout, and the common
 guided toggles.
 
-Chinese HUD labels are available as an explicit opt-in. English stays the default unless you choose `中文` in `/claude-hud:configure` or set `language` in config.
+Chinese HUD labels are available as an explicit opt-in. English stays the default unless you choose `中文` in `/claude-hud:configure` or set `language` in config. The short `zh` alias remains valid, and new guided config writes the canonical `zh-Hans` value.
 
 ### Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `language` | `en` \| `zh` | `en` | HUD label language. English is the default; set `zh` to enable Chinese labels. |
+| `language` | `en` \| `zh` \| `zh-Hans` | `en` | HUD label language. English is the default; set `zh` or `zh-Hans` to enable Simplified Chinese labels. |
 | `lineLayout` | string | `expanded` | Layout: `expanded` (multi-line) or `compact` (single line) |
 | `pathLevels` | 1-3 | 1 | Directory levels to show in project path |
 | `maxWidth` | number \| `null` | `null` | Optional fallback width used only when terminal width detection fails completely |
@@ -185,12 +185,15 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `display.usageBarEnabled` | boolean | true | Display usage as visual bar instead of text |
 | `display.usageCompact` | boolean | false | Display usage in a shorter text form such as `5h: 25% (1h 30m)`; takes precedence over `display.usageBarEnabled` |
 | `display.showResetLabel` | boolean | true | Show the `resets in` prefix before usage countdowns |
-| `display.timeFormat` | `relative` \| `absolute` \| `both` | `relative` | How reset times are shown in usage windows: countdown only (`resets in 2h 30m`), wall-clock time (`resets at 14:30`), or both (`resets in 2h 30m, at 14:30`) |
+| `display.timeFormat` | `relative` \| `absolute` \| `both` \| `elapsed` \| `elapsedAndAbsolute` | `relative` | How usage-window time is shown: countdown only (`resets in 2h 30m`), wall-clock reset (`resets at 14:30`), both, elapsed window percentage (`53% elapsed`), or elapsed plus wall-clock reset |
 | `display.sevenDayThreshold` | 0-100 | 80 | Show 7-day usage when >= threshold (0 = always) |
 | `display.externalUsagePath` | string | `""` | Optional path to a local usage snapshot file used only when stdin `rate_limits` are missing |
+| `display.externalUsageWritePath` | string | `""` | Optional absolute `.json` path in an existing directory. When stdin `rate_limits` exists, ClaudeHUD writes a private snapshot for other local tools. Relative paths, non-json files, and missing parent directories are ignored |
 | `display.externalUsageFreshnessMs` | number | `300000` | Maximum allowed age for the external usage snapshot before it is ignored |
 | `display.showTokenBreakdown` | boolean | true | Show token details at high context (85%+) |
 | `display.showTools` | boolean | false | Show tools activity line |
+| `display.toolNameMaxLength` | number | `0` | Maximum displayed tool-name length. `0` keeps full names; MCP names may shorten to their final segment when truncating |
+| `display.toolsMaxVisible` | number | `4` | Maximum completed tools shown on the tools line. `0` means unlimited |
 | `display.showAgents` | boolean | false | Show agents activity line |
 | `display.showTodos` | boolean | false | Show todos progress line |
 | `display.showSessionName` | boolean | false | Show session slug or custom title from `/rename` |
@@ -234,6 +237,8 @@ ClaudeHUD prefers the official statusline stdin payload. If `rate_limits` are mi
 
 The fallback snapshot must be fresh enough (`display.externalUsageFreshnessMs`) and include valid `updated_at`, plus a `five_hour` window, `seven_day` window, or `balance_label`. `balance_label` is optional text for prepaid provider balances; it is trimmed, length-limited, and sanitized before display. Invalid JSON, stale files, or invalid timestamps are ignored quietly.
 
+Set `display.externalUsageWritePath` if you want ClaudeHUD to write the official stdin `rate_limits` into a local snapshot for other tools. The path must be absolute, end in `.json`, and live in an existing directory. ClaudeHUD writes the file with private permissions and ignores invalid paths quietly.
+
 Free/weekly-only accounts render the weekly window by itself instead of showing a ghost `5h: --` placeholder.
 
 The 7-day percentage appears when above the `display.sevenDayThreshold` (default 80%):
@@ -245,8 +250,9 @@ Context █████░░░░░ 45% │ Usage ██░░░░░░░
 To disable, set `display.showUsage` to `false`.
 
 Reset times use relative countdowns by default. Set `display.timeFormat` to `absolute` for wall-clock
-times or `both` to show both forms. This setting is manual-only today; `/claude-hud:configure`
-preserves it without editing it.
+times, `both` to show both forms, `elapsed` to show how far through each usage window you are, or
+`elapsedAndAbsolute` to show elapsed window progress plus the wall-clock reset time. This setting is
+manual-only today; `/claude-hud:configure` preserves it without editing it.
 
 Set `display.showResetLabel` to `false` if you want shorter usage countdowns such as `(3h 17m)` instead of `(resets in 3h 17m)`.
 

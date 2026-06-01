@@ -125,13 +125,34 @@ function sliceVisible(str, maxVisible) {
     }
     return result;
 }
+// OSC 8 close sequence (`\x1b]8;;\x1b\\`) terminates the current hyperlink.
+// If truncation cuts inside an open OSC 8 hyperlink, emitting only an SGR
+// reset (`\x1b[0m`) is not enough — the terminal keeps treating subsequent
+// output as part of the link and renders its underline across the rest of
+// the line. This helper returns the close sequence iff the last OSC 8 in
+// `str` opened a hyperlink (non-empty URL) without being followed by a
+// closer (empty URL).
+const OSC8_OPEN_OR_CLOSE = /\x1b\]8;;([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
+const OSC8_CLOSE = '\x1b]8;;\x1b\\';
+function closeOpenHyperlink(str) {
+    let last = null;
+    let match;
+    OSC8_OPEN_OR_CLOSE.lastIndex = 0;
+    while ((match = OSC8_OPEN_OR_CLOSE.exec(str)) !== null) {
+        last = match;
+    }
+    return last && last[1].length > 0 ? OSC8_CLOSE : '';
+}
 function truncateToWidth(str, maxWidth) {
     if (maxWidth <= 0 || visualLength(str) <= maxWidth) {
         return str;
     }
     const suffix = maxWidth >= 3 ? '...' : '.'.repeat(maxWidth);
     const keep = Math.max(0, maxWidth - suffix.length);
-    return `${sliceVisible(str, keep)}${suffix}${RESET}`;
+    const sliced = sliceVisible(str, keep);
+    // Close the hyperlink (if any) before the ellipsis so the suffix renders
+    // as plain text rather than as part of the truncated link.
+    return `${sliced}${closeOpenHyperlink(sliced)}${suffix}${RESET}`;
 }
 function splitLineBySeparators(line) {
     const segments = [];

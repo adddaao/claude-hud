@@ -4,6 +4,7 @@ type ExecFileResult = {
 type ExecFileImpl = (file: string, args: string[], options: {
     timeout: number;
     encoding: BufferEncoding;
+    windowsHide?: boolean;
 }) => Promise<ExecFileResult>;
 type ClaudeBinaryInfo = {
     path: string;

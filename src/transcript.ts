@@ -74,7 +74,7 @@ interface TranscriptCacheFile {
   data: SerializedTranscriptData;
 }
 
-const TRANSCRIPT_CACHE_VERSION = 4;
+const TRANSCRIPT_CACHE_VERSION = 5;
 
 let createReadStreamImpl: typeof fs.createReadStream = fs.createReadStream;
 
@@ -251,6 +251,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
     cacheCreationTokens: 0,
     cacheReadTokens: 0,
   };
+  let lastUsageKey: string | undefined;
 
   let parsedCleanly = false;
 
@@ -262,7 +263,10 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
     });
 
     for await (const line of rl) {
-      if (!line.trim()) continue;
+      if (!line.trim()) {
+        lastUsageKey = undefined;
+        continue;
+      }
 
       try {
         const entry = JSON.parse(line) as TranscriptLine;
@@ -271,13 +275,21 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
         } else if (typeof entry.slug === 'string') {
           latestSlug = entry.slug;
         }
-        // Accumulate token usage from assistant messages
+        // Accumulate token usage from assistant messages.
+        // Claude Code can write the same API response to the transcript 2-3 times
+        // consecutively (dual-logging). Skip consecutive duplicates to avoid inflating counts.
         if (entry.type === 'assistant' && entry.message?.usage) {
           const usage = entry.message.usage;
-          sessionTokens.inputTokens += normalizeTokenCount(usage.input_tokens);
-          sessionTokens.outputTokens += normalizeTokenCount(usage.output_tokens);
-          sessionTokens.cacheCreationTokens += normalizeTokenCount(usage.cache_creation_input_tokens);
-          sessionTokens.cacheReadTokens += normalizeTokenCount(usage.cache_read_input_tokens);
+          const key = `${usage.input_tokens}|${usage.output_tokens}|${usage.cache_creation_input_tokens}|${usage.cache_read_input_tokens}`;
+          if (key !== lastUsageKey) {
+            sessionTokens.inputTokens += normalizeTokenCount(usage.input_tokens);
+            sessionTokens.outputTokens += normalizeTokenCount(usage.output_tokens);
+            sessionTokens.cacheCreationTokens += normalizeTokenCount(usage.cache_creation_input_tokens);
+            sessionTokens.cacheReadTokens += normalizeTokenCount(usage.cache_read_input_tokens);
+          }
+          lastUsageKey = key;
+        } else {
+          lastUsageKey = undefined;
         }
         // Track Claude Code's compact_boundary marker. Both manual (/compact)
         // and auto compaction emit this system entry with compactMetadata; we
@@ -310,6 +322,7 @@ export async function parseTranscript(transcriptPath: string): Promise<Transcrip
         }
         processEntry(entry, toolMap, agentMap, taskIdToIndex, latestTodos, result);
       } catch {
+        lastUsageKey = undefined;
         // Skip malformed lines
       }
     }

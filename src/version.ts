@@ -15,6 +15,7 @@ type ExecFileImpl = (
   options: {
     timeout: number;
     encoding: BufferEncoding;
+    windowsHide?: boolean;
   }
 ) => Promise<ExecFileResult>;
 
@@ -263,6 +264,7 @@ export async function getClaudeCodeVersion(): Promise<string | undefined> {
     const { stdout } = await execFileImpl(invocation.file, invocation.args, {
       timeout: 2000,
       encoding: 'utf8',
+      windowsHide: true,
     });
     cachedVersion = _parseClaudeCodeVersion(stdout);
   } catch {
