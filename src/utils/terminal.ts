@@ -1,3 +1,5 @@
+import { execSync } from 'node:child_process';
+
 export const UNKNOWN_TERMINAL_WIDTH = null;
 
 function parseEnvColumns(): number | null {
@@ -11,6 +13,62 @@ function parseStreamColumns(columns: unknown): number | null {
     : null;
 }
 
+function detectViaTput(): number | null {
+  try {
+    const result = execSync('tput cols 2>/dev/null', {
+      encoding: 'utf8',
+      timeout: 500,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const cols = parseInt(result.trim(), 10);
+    if (cols > 0) return cols;
+  } catch {
+    // tput not available
+  }
+  return null;
+}
+
+function detectViaStty(): number | null {
+  try {
+    const result = execSync('stty size </dev/tty 2>/dev/null', {
+      encoding: 'utf8',
+      timeout: 500,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const parts = result.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      const cols = parseInt(parts[1], 10);
+      if (cols > 0) return cols;
+    }
+  } catch {
+    // stty or /dev/tty not available
+  }
+  return null;
+}
+
+function detectViaMode(): number | null {
+  if (process.platform !== 'win32') return null;
+  try {
+    const result = execSync('mode con', {
+      encoding: 'utf8',
+      timeout: 500,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const match = result.match(/Columns:\s+(\d+)/);
+    if (match) {
+      const cols = parseInt(match[1], 10);
+      if (cols > 0) return cols;
+    }
+  } catch {
+    // mode con not available
+  }
+  return null;
+}
+
+function detectTerminalWidth(): number | null {
+  return detectViaTput() ?? detectViaStty() ?? detectViaMode();
+}
+
 export function getTerminalWidth(options: { preferEnv?: boolean; fallback?: number | null } = {}): number | null {
   const { preferEnv = false, fallback = null } = options;
 
@@ -18,12 +76,14 @@ export function getTerminalWidth(options: { preferEnv?: boolean; fallback?: numb
     return parseEnvColumns()
       ?? parseStreamColumns(process.stdout?.columns)
       ?? parseStreamColumns(process.stderr?.columns)
+      ?? detectTerminalWidth()
       ?? fallback;
   }
 
   return parseStreamColumns(process.stdout?.columns)
     ?? parseStreamColumns(process.stderr?.columns)
     ?? parseEnvColumns()
+    ?? detectTerminalWidth()
     ?? fallback;
 }
 
