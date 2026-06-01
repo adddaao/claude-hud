@@ -211,6 +211,7 @@ Claude Code → stdin JSON → claude-hud → stdout → 在终端中显示
 | `colors.custom` | 颜色值 | `208` | 可选自定义行的颜色 |
 | `colors.barFilled` | string | `█` | 进度条填充部分使用的字符 |
 | `colors.barEmpty` | string | `░` | 进度条空白部分使用的字符 |
+| `pricing` | `PricingOverride[]` | `[]` | 自定义模型定价覆盖。每条包含 `pattern`（匹配模型名的正则表达式）、`inputUsdPerMillion`（输入价格）和 `outputUsdPerMillion`（输出价格）。优先于内置定价。 |
 
 `colors.barFilled` 和 `colors.barEmpty` 接受单个可见字素。控制字符、不可见格式字符（双向控制符、零宽连接符、变体选择符）、行/段落分隔符和非字符会被拒绝。宽字符（emoji、CJK）可能会影响进度条对齐，具体取决于终端。
 
@@ -315,7 +316,11 @@ ClaudeHUD 优先使用官方 statusline stdin 负载中的使用率数据。如�
     "gitBranch": "cyan",
     "label": "dim",
     "custom": "#FF6600"
-  }
+  },
+  "pricing": [
+    { "pattern": "deepseek.*v4.*pro", "inputUsdPerMillion": 1.74, "outputUsdPerMillion": 3.48 },
+    { "pattern": "deepseek", "inputUsdPerMillion": 0.14, "outputUsdPerMillion": 0.28 }
+  ]
 }
 ```
 

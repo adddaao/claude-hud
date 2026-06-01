@@ -5,7 +5,7 @@ export function renderCostEstimate(ctx) {
     if (ctx.config?.display?.showCost !== true) {
         return null;
     }
-    const cost = resolveSessionCost(ctx.stdin, ctx.transcript.sessionTokens);
+    const cost = resolveSessionCost(ctx.stdin, ctx.transcript.sessionTokens, ctx.config?.pricing);
     if (!cost) {
         return null;
     }

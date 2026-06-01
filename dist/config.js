@@ -99,6 +99,7 @@ export const DEFAULT_CONFIG = {
         barFilled: '█',
         barEmpty: '░',
     },
+    pricing: [],
 };
 export function getConfigPath() {
     const homeDir = os.homedir();
@@ -293,6 +294,28 @@ function validateFreshnessMs(value) {
         return DEFAULT_CONFIG.display.externalUsageFreshnessMs;
     }
     return Math.max(0, Math.floor(value));
+}
+function validatePricing(value) {
+    if (!Array.isArray(value))
+        return [];
+    const result = [];
+    for (const entry of value) {
+        if (typeof entry !== 'object' || entry === null)
+            continue;
+        const e = entry;
+        if (typeof e.pattern !== 'string' || !e.pattern)
+            continue;
+        if (typeof e.inputUsdPerMillion !== 'number' || !Number.isFinite(e.inputUsdPerMillion) || e.inputUsdPerMillion < 0)
+            continue;
+        if (typeof e.outputUsdPerMillion !== 'number' || !Number.isFinite(e.outputUsdPerMillion) || e.outputUsdPerMillion < 0)
+            continue;
+        result.push({
+            pattern: e.pattern,
+            inputUsdPerMillion: e.inputUsdPerMillion,
+            outputUsdPerMillion: e.outputUsdPerMillion,
+        });
+    }
+    return result;
 }
 export function mergeConfig(userConfig) {
     const migrated = migrateConfig(userConfig);
@@ -492,7 +515,8 @@ export function mergeConfig(userConfig) {
             ? migrated.colors.barEmpty
             : DEFAULT_CONFIG.colors.barEmpty,
     };
-    return { language, lineLayout, showSeparators, pathLevels, maxWidth, forceMaxWidth, elementOrder, gitStatus, display, colors };
+    const pricing = validatePricing(migrated.pricing);
+    return { language, lineLayout, showSeparators, pathLevels, maxWidth, forceMaxWidth, elementOrder, gitStatus, display, colors, pricing };
 }
 export async function loadConfig() {
     const configPath = getConfigPath();

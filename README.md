@@ -216,6 +216,7 @@ Chinese HUD labels are available as an explicit opt-in. English stays the defaul
 | `colors.custom` | color value | `208` | Color for the optional custom line |
 | `colors.barFilled` | string | `█` | Character used for the filled portion of progress bars |
 | `colors.barEmpty` | string | `░` | Character used for the empty portion of progress bars |
+| `pricing` | `PricingOverride[]` | `[]` | Custom model pricing overrides. Each entry has `pattern` (regex matched against model name), `inputUsdPerMillion`, and `outputUsdPerMillion`. Takes priority over built-in pricing. |
 
 `colors.barFilled` and `colors.barEmpty` accept a single visible grapheme. Control characters, invisible format characters (bidi controls, zero-width joiners, variation selectors), line/paragraph separators, and noncharacters are rejected. Wide characters (emoji, CJK) may affect bar alignment depending on the terminal.
 
@@ -323,7 +324,11 @@ Example fallback snapshot:
     "gitBranch": "cyan",
     "label": "dim",
     "custom": "#FF6600"
-  }
+  },
+  "pricing": [
+    { "pattern": "deepseek.*v4.*pro", "inputUsdPerMillion": 1.74, "outputUsdPerMillion": 3.48 },
+    { "pattern": "deepseek", "inputUsdPerMillion": 0.14, "outputUsdPerMillion": 0.28 }
+  ]
 }
 ```
 

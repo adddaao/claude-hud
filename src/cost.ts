@@ -1,4 +1,5 @@
 import type { SessionTokenUsage, StdinData } from './types.js';
+import type { PricingOverride } from './config.js';
 import { isBedrockModelId, isVertexModelId } from './stdin.js';
 
 type ModelPricing = {
@@ -26,7 +27,7 @@ const CACHE_READ_MULTIPLIER = 0.1;
 // Patterns are tried in order; the first match wins. Families with more specific
 // model lines (Haiku 4.x differs from Haiku 3.5) must come before any broader
 // fallback patterns to avoid silent under-pricing.
-const ANTHROPIC_MODEL_PRICING: Array<{ pattern: RegExp; pricing: ModelPricing }> = [
+const MODEL_PRICING: Array<{ pattern: RegExp; pricing: ModelPricing }> = [
   { pattern: /\bopus 4(?: \d+)?\b/i, pricing: { inputUsdPerMillion: 15, outputUsdPerMillion: 75 } },
   { pattern: /\bsonnet 4(?: \d+)?\b/i, pricing: { inputUsdPerMillion: 3, outputUsdPerMillion: 15 } },
   { pattern: /\bsonnet 3 7\b/i, pricing: { inputUsdPerMillion: 3, outputUsdPerMillion: 15 } },
@@ -37,6 +38,9 @@ const ANTHROPIC_MODEL_PRICING: Array<{ pattern: RegExp; pricing: ModelPricing }>
   { pattern: /\bopusplan\b/i, pricing: { inputUsdPerMillion: 15, outputUsdPerMillion: 75 } },
   { pattern: /\bsonnetplan\b/i, pricing: { inputUsdPerMillion: 3, outputUsdPerMillion: 15 } },
   { pattern: /\bhaikuplan\b/i, pricing: { inputUsdPerMillion: 0.8, outputUsdPerMillion: 4 } },
+  // DeepSeek models (v4-pro before general to avoid under-pricing)
+  { pattern: /\bdeepseek[\s.]*v\s*4[\s.]*pro\b/i, pricing: { inputUsdPerMillion: 1.74, outputUsdPerMillion: 3.48 } },
+  { pattern: /\bdeepseek\b/i, pricing: { inputUsdPerMillion: 0.14, outputUsdPerMillion: 0.28 } },
 ];
 
 function normalizeModelName(modelName: string): string {
@@ -49,9 +53,9 @@ function normalizeModelName(modelName: string): string {
     .trim();
 }
 
-function matchAnthropicPricing(modelName: string): ModelPricing | null {
+function matchModelPricing(modelName: string): ModelPricing | null {
   const normalized = normalizeModelName(modelName);
-  for (const entry of ANTHROPIC_MODEL_PRICING) {
+  for (const entry of MODEL_PRICING) {
     if (entry.pattern.test(normalized)) {
       return entry.pricing;
     }
@@ -63,18 +67,37 @@ function calculateUsd(tokens: number, usdPerMillion: number): number {
   return (tokens * usdPerMillion) / TOKENS_PER_MILLION;
 }
 
-function getAnthropicPricing(stdin: StdinData): ModelPricing | null {
+function getModelPricing(stdin: StdinData, overrides?: PricingOverride[]): ModelPricing | null {
   const candidates = [
     stdin.model?.display_name?.trim(),
     stdin.model?.id?.trim(),
   ];
 
+  // Config overrides take priority (tried in order, first match wins)
+  if (overrides && overrides.length > 0) {
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      const normalized = normalizeModelName(candidate);
+      for (const override of overrides) {
+        try {
+          const re = new RegExp(override.pattern, 'i');
+          if (re.test(normalized)) {
+            return { inputUsdPerMillion: override.inputUsdPerMillion, outputUsdPerMillion: override.outputUsdPerMillion };
+          }
+        } catch {
+          // Invalid regex pattern — skip
+        }
+      }
+    }
+  }
+
+  // Fall back to hardcoded defaults
   for (const candidate of candidates) {
     if (!candidate) {
       continue;
     }
 
-    const pricing = matchAnthropicPricing(candidate);
+    const pricing = matchModelPricing(candidate);
     if (pricing) {
       return pricing;
     }
@@ -86,6 +109,7 @@ function getAnthropicPricing(stdin: StdinData): ModelPricing | null {
 export function estimateSessionCost(
   stdin: StdinData,
   sessionTokens: SessionTokenUsage | undefined,
+  overrides?: PricingOverride[],
 ): SessionCostEstimate | null {
   if (!sessionTokens) {
     return null;
@@ -99,7 +123,7 @@ export function estimateSessionCost(
     return null;
   }
 
-  const pricing = getAnthropicPricing(stdin);
+  const pricing = getModelPricing(stdin, overrides);
   if (!pricing) {
     return null;
   }
@@ -146,6 +170,7 @@ function getNativeCostUsd(stdin: StdinData): number | null {
 export function resolveSessionCost(
   stdin: StdinData,
   sessionTokens: SessionTokenUsage | undefined,
+  overrides?: PricingOverride[],
 ): SessionCostDisplay | null {
   const nativeCostUsd = getNativeCostUsd(stdin);
   if (nativeCostUsd !== null) {
@@ -155,7 +180,7 @@ export function resolveSessionCost(
     };
   }
 
-  const estimate = estimateSessionCost(stdin, sessionTokens);
+  const estimate = estimateSessionCost(stdin, sessionTokens, overrides);
   if (!estimate) {
     return null;
   }

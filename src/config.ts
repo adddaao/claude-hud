@@ -37,6 +37,12 @@ export type HudColorName =
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
 export type HudColorValue = HudColorName | number | string;
 
+export interface PricingOverride {
+  pattern: string;
+  inputUsdPerMillion: number;
+  outputUsdPerMillion: number;
+}
+
 export interface HudColorOverrides {
   context: HudColorValue;
   usage: HudColorValue;
@@ -139,6 +145,7 @@ export interface HudConfig {
     timeFormat: TimeFormatMode;
   };
   colors: HudColorOverrides;
+  pricing: PricingOverride[];
 }
 
 export const DEFAULT_CONFIG: HudConfig = {
@@ -221,6 +228,7 @@ export const DEFAULT_CONFIG: HudConfig = {
     barFilled: '█',
     barEmpty: '░',
   },
+  pricing: [],
 };
 
 export function getConfigPath(): string {
@@ -452,6 +460,25 @@ function validateFreshnessMs(value: unknown): number {
   return Math.max(0, Math.floor(value));
 }
 
+function validatePricing(value: unknown): PricingOverride[] {
+  if (!Array.isArray(value)) return [];
+
+  const result: PricingOverride[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const e = entry as Record<string, unknown>;
+    if (typeof e.pattern !== 'string' || !e.pattern) continue;
+    if (typeof e.inputUsdPerMillion !== 'number' || !Number.isFinite(e.inputUsdPerMillion) || e.inputUsdPerMillion < 0) continue;
+    if (typeof e.outputUsdPerMillion !== 'number' || !Number.isFinite(e.outputUsdPerMillion) || e.outputUsdPerMillion < 0) continue;
+    result.push({
+      pattern: e.pattern,
+      inputUsdPerMillion: e.inputUsdPerMillion,
+      outputUsdPerMillion: e.outputUsdPerMillion,
+    });
+  }
+  return result;
+}
+
 export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
   const migrated = migrateConfig(userConfig);
   const language = validateLanguage(migrated.language)
@@ -674,7 +701,9 @@ export function mergeConfig(userConfig: Partial<HudConfig>): HudConfig {
       : DEFAULT_CONFIG.colors.barEmpty,
   };
 
-  return { language, lineLayout, showSeparators, pathLevels, maxWidth, forceMaxWidth, elementOrder, gitStatus, display, colors };
+  const pricing = validatePricing(migrated.pricing);
+
+  return { language, lineLayout, showSeparators, pathLevels, maxWidth, forceMaxWidth, elementOrder, gitStatus, display, colors, pricing };
 }
 
 export async function loadConfig(): Promise<HudConfig> {

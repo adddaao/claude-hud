@@ -5,7 +5,7 @@ const CACHE_READ_MULTIPLIER = 0.1;
 // Patterns are tried in order; the first match wins. Families with more specific
 // model lines (Haiku 4.x differs from Haiku 3.5) must come before any broader
 // fallback patterns to avoid silent under-pricing.
-const ANTHROPIC_MODEL_PRICING = [
+const MODEL_PRICING = [
     { pattern: /\bopus 4(?: \d+)?\b/i, pricing: { inputUsdPerMillion: 15, outputUsdPerMillion: 75 } },
     { pattern: /\bsonnet 4(?: \d+)?\b/i, pricing: { inputUsdPerMillion: 3, outputUsdPerMillion: 15 } },
     { pattern: /\bsonnet 3 7\b/i, pricing: { inputUsdPerMillion: 3, outputUsdPerMillion: 15 } },
@@ -16,6 +16,9 @@ const ANTHROPIC_MODEL_PRICING = [
     { pattern: /\bopusplan\b/i, pricing: { inputUsdPerMillion: 15, outputUsdPerMillion: 75 } },
     { pattern: /\bsonnetplan\b/i, pricing: { inputUsdPerMillion: 3, outputUsdPerMillion: 15 } },
     { pattern: /\bhaikuplan\b/i, pricing: { inputUsdPerMillion: 0.8, outputUsdPerMillion: 4 } },
+    // DeepSeek models (v4-pro before general to avoid under-pricing)
+    { pattern: /\bdeepseek[\s.]*v\s*4[\s.]*pro\b/i, pricing: { inputUsdPerMillion: 1.74, outputUsdPerMillion: 3.48 } },
+    { pattern: /\bdeepseek\b/i, pricing: { inputUsdPerMillion: 0.14, outputUsdPerMillion: 0.28 } },
 ];
 function normalizeModelName(modelName) {
     return modelName
@@ -26,9 +29,9 @@ function normalizeModelName(modelName) {
         .replace(/\s+/g, ' ')
         .trim();
 }
-function matchAnthropicPricing(modelName) {
+function matchModelPricing(modelName) {
     const normalized = normalizeModelName(modelName);
-    for (const entry of ANTHROPIC_MODEL_PRICING) {
+    for (const entry of MODEL_PRICING) {
         if (entry.pattern.test(normalized)) {
             return entry.pricing;
         }
@@ -38,23 +41,43 @@ function matchAnthropicPricing(modelName) {
 function calculateUsd(tokens, usdPerMillion) {
     return (tokens * usdPerMillion) / TOKENS_PER_MILLION;
 }
-function getAnthropicPricing(stdin) {
+function getModelPricing(stdin, overrides) {
     const candidates = [
         stdin.model?.display_name?.trim(),
         stdin.model?.id?.trim(),
     ];
+    // Config overrides take priority (tried in order, first match wins)
+    if (overrides && overrides.length > 0) {
+        for (const candidate of candidates) {
+            if (!candidate)
+                continue;
+            const normalized = normalizeModelName(candidate);
+            for (const override of overrides) {
+                try {
+                    const re = new RegExp(override.pattern, 'i');
+                    if (re.test(normalized)) {
+                        return { inputUsdPerMillion: override.inputUsdPerMillion, outputUsdPerMillion: override.outputUsdPerMillion };
+                    }
+                }
+                catch {
+                    // Invalid regex pattern — skip
+                }
+            }
+        }
+    }
+    // Fall back to hardcoded defaults
     for (const candidate of candidates) {
         if (!candidate) {
             continue;
         }
-        const pricing = matchAnthropicPricing(candidate);
+        const pricing = matchModelPricing(candidate);
         if (pricing) {
             return pricing;
         }
     }
     return null;
 }
-export function estimateSessionCost(stdin, sessionTokens) {
+export function estimateSessionCost(stdin, sessionTokens, overrides) {
     if (!sessionTokens) {
         return null;
     }
@@ -64,7 +87,7 @@ export function estimateSessionCost(stdin, sessionTokens) {
     if (isVertexModelId(stdin.model?.id)) {
         return null;
     }
-    const pricing = getAnthropicPricing(stdin);
+    const pricing = getModelPricing(stdin, overrides);
     if (!pricing) {
         return null;
     }
@@ -100,7 +123,7 @@ function getNativeCostUsd(stdin) {
     }
     return nativeCost;
 }
-export function resolveSessionCost(stdin, sessionTokens) {
+export function resolveSessionCost(stdin, sessionTokens, overrides) {
     const nativeCostUsd = getNativeCostUsd(stdin);
     if (nativeCostUsd !== null) {
         return {
@@ -108,7 +131,7 @@ export function resolveSessionCost(stdin, sessionTokens) {
             source: 'native',
         };
     }
-    const estimate = estimateSessionCost(stdin, sessionTokens);
+    const estimate = estimateSessionCost(stdin, sessionTokens, overrides);
     if (!estimate) {
         return null;
     }

@@ -19,6 +19,11 @@ export type AddedDirsLayout = 'inline' | 'line';
 export type HudColorName = 'dim' | 'red' | 'green' | 'yellow' | 'magenta' | 'cyan' | 'brightBlue' | 'brightMagenta';
 /** A color value: named preset, 256-color index (0-255), or hex string (#rrggbb). */
 export type HudColorValue = HudColorName | number | string;
+export interface PricingOverride {
+    pattern: string;
+    inputUsdPerMillion: number;
+    outputUsdPerMillion: number;
+}
 export interface HudColorOverrides {
     context: HudColorValue;
     usage: HudColorValue;
@@ -102,6 +107,7 @@ export interface HudConfig {
         timeFormat: TimeFormatMode;
     };
     colors: HudColorOverrides;
+    pricing: PricingOverride[];
 }
 export declare const DEFAULT_CONFIG: HudConfig;
 export declare function getConfigPath(): string;
