@@ -531,9 +531,27 @@ After successfully writing the config, tell the user:
 2. Copy it back: `cp ~/.claude/settings.json.bak.{timestamp} ~/.claude/settings.json`
 3. Restart Claude Code.
 
-## Step 4: Optional Features
+## Step 4: Layout & Optional Features
 
-After the statusLine is applied, ask the user if they'd like to enable additional HUD features beyond the default 2-line display.
+After the statusLine is applied, configure the HUD layout and optional features.
+
+### Step 4a: Layout
+
+Use AskUserQuestion:
+- header: "Layout"
+- question: "Choose HUD layout?"
+- multiSelect: false
+- options:
+  - "Compact (recommended)" — All info in one dense line: `[Opus] │ project │ Context ██░░ 45% │ Usage ██░░ 25% │ ...`
+  - "Expanded" — Multi-line: Line 1 = model+project, Line 2 = context bar, Line 3 = usage bar, etc.
+
+Write `lineLayout` to config based on selection:
+| Selection | Config |
+|-----------|--------|
+| Compact | `lineLayout: "compact"`, `showSeparators: false` |
+| Expanded | (defaults, no keys needed) |
+
+### Step 4b: Optional Features
 
 Use AskUserQuestion:
 - header: "Extras"
@@ -546,10 +564,13 @@ Use AskUserQuestion:
   - "Session name" — Shows session slug or custom title from /rename
   - "Custom line" — Display a custom phrase in the HUD
 
-**If user selects any options**, write `plugins/claude-hud/config.json` inside the Claude config directory (`${CLAUDE_CONFIG_DIR:-$HOME/.claude}` on bash, `$env:CLAUDE_CONFIG_DIR` or `Join-Path $HOME ".claude"` on PowerShell). Create directories if needed:
+### Step 4c: Write config.json
+
+**If user selected any options in Step 4a or 4b**, write `plugins/claude-hud/config.json` inside the Claude config directory (`${CLAUDE_CONFIG_DIR:-$HOME/.claude}` on bash, `$env:CLAUDE_CONFIG_DIR` or `Join-Path $HOME ".claude"` on PowerShell). Create directories if needed:
 
 | Selection | Config keys |
 |-----------|------------|
+| Compact layout | `lineLayout: "compact"`, `showSeparators: false` |
 | Tools activity | `display.showTools: true` |
 | Agents & Todos | `display.showAgents: true, display.showTodos: true` |
 | Session info | `display.showDuration: true, display.showConfigCounts: true` |
