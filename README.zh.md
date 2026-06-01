@@ -9,6 +9,77 @@
 
 > 🌐 [English README](README.md) | 中文文档
 
+# 第三方模型用量接入
+
+Claude HUD 支持在非 Anthropic 官方模型（如 ZhipuAI、DeepSeek）下显示用量信息。通过一个统一的 fetch 脚本自动检测当前提供商并拉取数据。
+
+## 支持的提供商
+
+| 提供商 | 检测条件 | 显示内容 |
+|--------|---------|---------|
+| ZhipuAI（智谱） | `ANTHROPIC_BASE_URL` 含 `z.ai` 或 `bigmodel` | 5 小时 / 7 天用量百分比进度条 + 套餐等级 |
+| DeepSeek | `ANTHROPIC_BASE_URL` 含 `deepseek` | 账户余额（如 ¥6.35） |
+
+## 前提条件
+
+在 Claude Code 的 `~/.claude/settings.json` 中已配置好以下字段：
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://api.deepseek.com",
+    "ANTHROPIC_API_KEY": "sk-xxx"
+  }
+}
+```
+
+没配好的话 setup 会直接提示，不需要你额外操作。
+
+## 一键配置
+
+```
+/claude-hud:usage-setup
+```
+
+这个命令会自动完成：
+
+1. **检测提供商** — 读 `ANTHROPIC_BASE_URL` 判断是 ZhipuAI 还是 DeepSeek
+2. **验证 API Key** — 没配就提示，配了就测试连接
+3. **安装 fetch 脚本** — 复制 `fetch-usage.sh` 到插件目录
+4. **写配置** — 更新 `config.json` 的 `externalUsagePath` 指向 snapshot 文件
+5. **注册 Hook** — 在 `settings.json` 添加 `PreToolUse` hook，每次工具调用时异步刷新数据
+
+重启 Claude Code 后生效。
+
+## 切换提供商
+
+只需要改 `settings.json` 里的 `ANTHROPIC_BASE_URL` 和 `ANTHROPIC_API_KEY`。同一个 fetch 脚本自动适配新提供商，不需要重跑 setup。
+
+```json
+// 切到 DeepSeek
+{ "env": { "ANTHROPIC_BASE_URL": "https://api.deepseek.com", "ANTHROPIC_API_KEY": "sk-deepseek-xxx" } }
+
+// 切到 ZhipuAI
+{ "env": { "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/paas/v4", "ANTHROPIC_API_KEY": "xxx.zhipu-xxx" } }
+```
+
+## 费用估算
+
+费用估算支持 Anthropic 全系模型 + DeepSeek（V4 Flash / V4 Pro）。价格按官网硬编码，可通过 config 覆盖：
+
+```json
+{
+  "pricing": [
+    { "pattern": "deepseek.*v4.*pro", "inputUsdPerMillion": 1.74, "outputUsdPerMillion": 3.48 },
+    { "pattern": "deepseek", "inputUsdPerMillion": 0.14, "outputUsdPerMillion": 0.28 }
+  ]
+}
+```
+
+`pattern` 是匹配模型名的正则表达式，按顺序匹配，第一个命中的生效。未匹配到的模型使用内置默认价格。
+
+---
+
 ## 安装
 
 在 Claude Code 实例中，运行以下命令：

@@ -9,7 +9,9 @@
   "commands": [
     "./commands/setup.md",
     "./commands/configure.md",
-    "./commands/zhipu-usage-setup.md"
+    "./commands/usage-setup.md",
+    "./commands/zhipu-usage-setup.md",
+    "./commands/deepseek-usage-setup.md"
   ],
   "homepage": "https://github.com/jarrodwatts/claude-hud",
   "repository": "https://github.com/jarrodwatts/claude-hud",
