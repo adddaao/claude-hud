@@ -562,41 +562,36 @@ Merge with existing config if the file already exists. Only write keys the user 
 
 ---
 
-## Step 4.5: Auto-detect ZhipuAI (Optional)
+## Step 4.5: Auto-detect Provider Usage Display (Optional)
 
-After writing config, automatically check if the user is on ZhipuAI and configure usage display.
+After writing config, automatically detect the provider from `ANTHROPIC_BASE_URL` and configure usage/balance display.
 
 **macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SETTINGS="$CLAUDE_DIR/settings.json"
 
-# Detect ZhipuAI
 BASE_URL=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS','utf8')); console.log(s.env?.ANTHROPIC_BASE_URL || '')" 2>/dev/null || echo "")
 API_KEY=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS','utf8')); console.log(s.env?.ANTHROPIC_API_KEY || '')" 2>/dev/null || echo "")
 
-if echo "$BASE_URL" | grep -qi 'bigmodel\|z\.ai'; then
-  echo "ZHIPUAI_DETECTED=true"
-  echo "API_KEY_PRESENT=$([ -n "$API_KEY" ] && echo 'yes' || echo 'no')"
-else
-  echo "ZHIPUAI_DETECTED=false"
-fi
+echo "Base URL: $BASE_URL"
+echo "Provider: $(echo "$BASE_URL" | grep -qi 'deepseek' && echo 'deepseek' || (echo "$BASE_URL" | grep -qi 'bigmodel\|z\.ai' && echo 'zhipu' || echo 'unknown'))"
+echo "API key: $([ -n "$API_KEY" ] && echo 'found' || echo 'missing')"
 ```
 
-**If `ZHIPUAI_DETECTED=false`**: Skip this step entirely. Continue to Step 5.
+**If provider is `unknown`** (base URL doesn't match ZhipuAI or DeepSeek): Skip this step. Continue to Step 5.
 
-**If `ZHIPUAI_DETECTED=true` and `API_KEY_PRESENT=yes`**: Auto-configure ZhipuAI usage display. Tell the user "Detected ZhipuAI — configuring usage display..." and proceed with the sub-steps below. Do NOT ask for the API key.
+**If provider is detected and API key is present**: Auto-configure usage display. Tell the user "Detected {provider} — configuring usage display..." and proceed with sub-steps below. Do NOT ask for the API key.
 
-**If `ZHIPUAI_DETECTED=true` and `API_KEY_PRESENT=no`**: Ask the user:
-- header: "ZhipuAI"
-- question: "Detected ZhipuAI but no API key found. Enter your key to enable usage display, or skip."
-- Options: let them type the key or say "skip"
+**If provider is detected but API key is missing**: Tell the user:
 
-If they skip, continue to Step 5.
+> Detected {provider} but `ANTHROPIC_API_KEY` not found in settings. Please configure it in `~/.claude/settings.json` under `env`, then re-run `/claude-hud:setup`.
 
-### ZhipuAI auto-configure sub-steps
+Continue to Step 5.
 
-**4.5a: Copy fetch script**
+### Auto-configure sub-steps
+
+**4.5a: Copy unified fetch script**
 
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
@@ -604,10 +599,10 @@ PLUGIN_DIR=$(ls -d "$CLAUDE_DIR"/plugins/cache/*/claude-hud/*/ 2>/dev/null | sor
 SCRIPT_DEST="$CLAUDE_DIR/plugins/claude-hud"
 mkdir -p "$SCRIPT_DEST"
 
-FETCH_SCRIPT="$PLUGIN_DIR/scripts/fetch-zhipu-usage.sh"
+FETCH_SCRIPT="$PLUGIN_DIR/scripts/fetch-usage.sh"
 if [ -f "$FETCH_SCRIPT" ]; then
-  cp "$FETCH_SCRIPT" "$SCRIPT_DEST/fetch-zhipu-usage.sh"
-  chmod +x "$SCRIPT_DEST/fetch-zhipu-usage.sh"
+  cp "$FETCH_SCRIPT" "$SCRIPT_DEST/fetch-usage.sh"
+  chmod +x "$SCRIPT_DEST/fetch-usage.sh"
   echo "OK: fetch script installed"
 else
   echo "WARN: fetch script not found in plugin, skipping"
@@ -618,7 +613,8 @@ fi
 
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-ZHIPU_API_KEY="$API_KEY" "$CLAUDE_DIR/plugins/claude-hud/fetch-zhipu-usage.sh" 2>/dev/null && echo "OK: API connected" || echo "WARN: API test failed"
+ANTHROPIC_API_KEY="$API_KEY" ANTHROPIC_BASE_URL="$BASE_URL" "$CLAUDE_DIR/plugins/claude-hud/fetch-usage.sh" 2>/dev/null && echo "OK: API connected" || echo "WARN: API test failed"
+cat "$CLAUDE_DIR/plugins/claude-hud/usage-snapshot.json" 2>/dev/null
 ```
 
 If the test fails, warn the user but continue — it may work after restart.
@@ -645,12 +641,9 @@ Replace `<absolute path>` with the fully expanded path: `${CLAUDE_CONFIG_DIR:-$H
 
 Add to the existing settings:
 
-1. Add `ZHIPU_API_KEY` to `env` (same value as the detected key):
-```json
-{ "env": { "ZHIPU_API_KEY": "<the key>" } }
-```
+1. Add `ANTHROPIC_API_KEY` to `env` if not already there (same value as the detected key).
 
-2. Add the fetch hook to `hooks.PreToolUse`. If a PreToolUse entry with matcher `Bash|Read|Write|Edit` already exists, append the hook to its `hooks` array. Otherwise add the full entry:
+2. Add the fetch hook to `hooks.PreToolUse`. If a PreToolUse entry with matcher `Bash|Read|Write|Edit` already exists, append the hook to its `hooks` array if not already present. Remove any old `fetch-zhipu-usage.sh` or `fetch-deepseek-usage.sh` hooks. Otherwise add the full entry:
 ```json
 {
   "hooks": {
@@ -658,7 +651,7 @@ Add to the existing settings:
       "matcher": "Bash|Read|Write|Edit",
       "hooks": [{
         "type": "command",
-        "command": "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/fetch-zhipu-usage.sh",
+        "command": "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/fetch-usage.sh",
         "async": true
       }]
     }]
@@ -666,7 +659,13 @@ Add to the existing settings:
 }
 ```
 
-After completing these sub-steps, tell the user: "ZhipuAI usage display configured — 5h and 7d quota bars will appear in the HUD."
+After completing these sub-steps, tell the user based on the detected provider:
+
+**For DeepSeek**: "DeepSeek balance display configured — your account balance (e.g. ¥6.35) will appear in the HUD."
+
+**For ZhipuAI**: "ZhipuAI usage display configured — 5h and 7d quota bars will appear in the HUD."
+
+**When switching providers**: Just change `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` in settings — the fetch script auto-detects the new provider. No need to re-run setup.
 
 ---
 
