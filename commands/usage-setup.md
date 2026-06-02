@@ -84,9 +84,11 @@ Write-Host "Provider: $provider"
 
 **Conflict check**:
 
-- If `ANTHROPIC_API_KEY` starts with `sk-ant-` (looks like an Anthropic key), warn the user that the URL/key pair doesn't match and ask them to fix `settings.json` before re-running.
-- If both `DEEPSEEK_API_KEY` and `ZHIPU_API_KEY` are set, ask the user which to keep and remove the other.
-- If `PROVIDER` matches DeepSeek but `ZHIPU_API_KEY` is set (or vice versa), ask the user which signal is authoritative.
+Unified mode (ANTHROPIC_API_KEY + hostname match) takes precedence over standalone DEEPSEEK_API_KEY / ZHIPU_API_KEY. Standalone keys are fallback only.
+
+- If `PROVIDER` is detected AND `ANTHROPIC_API_KEY` starts with `sk-ant-` → URL/key mismatch. Ask the user to fix `settings.json` before re-running.
+- If `PROVIDER` is detected AND a stale standalone key (DEEPSEEK_API_KEY / ZHIPU_API_KEY) is also set → unified mode wins; the standalone key is unused. Tell the user it can be removed so a single key is the source of truth.
+- If `PROVIDER` is empty AND both `DEEPSEEK_API_KEY` and `ZHIPU_API_KEY` are set → conflict. Ask the user which to keep and remove the other.
 
 ### Step 2: Detect plugin install path
 

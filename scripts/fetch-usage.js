@@ -67,12 +67,26 @@ async function fetchDeepSeek(apiKey, snapshotFile) {
 }
 
 async function fetchZhipu(apiKey, snapshotFile) {
-  const url = process.env.ZHIPU_API_URL || 'https://api.z.ai/api/monitor/usage/quota/limit';
-  const body = await httpGet(url, {
+  const candidateUrls = process.env.ZHIPU_API_URL
+    ? [process.env.ZHIPU_API_URL]
+    : [
+        'https://api.z.ai/api/monitor/usage/quota/limit',
+        'https://open.bigmodel.cn/api/monitor/usage/quota/limit',
+      ];
+  const headers = {
     Authorization: apiKey,
     'Content-Type': 'application/json',
     'Accept-Language': 'en-US,en',
-  });
+  };
+  let body = '';
+  for (const url of candidateUrls) {
+    try {
+      body = await httpGet(url, headers);
+      if (body && body.trim()) break;
+    } catch {
+      // try next endpoint
+    }
+  }
   if (!body || !body.trim()) return;
   const data = JSON.parse(body);
   if (data.success === false) throw new Error('API returned success=false');
@@ -127,9 +141,22 @@ async function main() {
   const deepseekKey = process.env.DEEPSEEK_API_KEY || '';
   const zhipuKey = process.env.ZHIPU_API_KEY || '';
 
-  // Standalone modes (dedicated env vars take precedence over unified mode).
-  // If both standalone keys are set, that's a conflict — log to stderr and
-  // prefer DeepSeek (mirrors the previous ordering) so behavior is deterministic.
+  // Unified mode takes precedence: a single ANTHROPIC_API_KEY paired with a
+  // known ANTHROPIC_BASE_URL hostname is the source of truth. Standalone keys
+  // (DEEPSEEK_API_KEY / ZHIPU_API_KEY) are fallbacks for when unified mode
+  // can't detect a provider (e.g. custom proxy URLs).
+  if (anthropicKey) {
+    const provider = detectProviderFromBaseUrl(process.env.ANTHROPIC_BASE_URL);
+    if (provider === 'deepseek') {
+      await fetchDeepSeek(anthropicKey, 'usage-snapshot.json');
+      return;
+    }
+    if (provider === 'zhipu') {
+      await fetchZhipu(anthropicKey, 'usage-snapshot.json');
+      return;
+    }
+  }
+
   if (deepseekKey && zhipuKey) {
     process.stderr.write('[claude-hud] Both DEEPSEEK_API_KEY and ZHIPU_API_KEY are set; using DeepSeek. Unset one to resolve the ambiguity.\n');
   }
@@ -140,18 +167,6 @@ async function main() {
   if (zhipuKey) {
     await fetchZhipu(zhipuKey, 'usage-snapshot.json');
     return;
-  }
-
-  // Unified mode: detect provider from ANTHROPIC_BASE_URL hostname.
-  if (!anthropicKey) return;
-
-  const provider = detectProviderFromBaseUrl(process.env.ANTHROPIC_BASE_URL);
-  if (!provider) return;
-
-  if (provider === 'deepseek') {
-    await fetchDeepSeek(anthropicKey, 'usage-snapshot.json');
-  } else if (provider === 'zhipu') {
-    await fetchZhipu(anthropicKey, 'usage-snapshot.json');
   }
 }
 

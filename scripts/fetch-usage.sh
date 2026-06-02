@@ -66,12 +66,24 @@ if [ "$PROVIDER" = "deepseek" ]; then
 
 elif [ "$PROVIDER" = "zhipu" ]; then
   # ── ZhipuAI: quota/limit API ───────────────────────────────────
-  API_URL="${ZHIPU_API_URL:-https://api.z.ai/api/monitor/usage/quota/limit}"
-  response=$(curl -sf --max-time 10 \
-    -H "Authorization: ${API_KEY}" \
-    -H "Content-Type: application/json" \
-    -H "Accept-Language: en-US,en" \
-    "$API_URL" 2>/dev/null) || exit 0
+  # Try international endpoint first, fall back to bigmodel.cn (CN mirror).
+  # ZHIPU_API_URL overrides both — set it to use a custom endpoint only.
+  CANDIDATE_URLS=()
+  if [ -n "${ZHIPU_API_URL:-}" ]; then
+    CANDIDATE_URLS+=("$ZHIPU_API_URL")
+  else
+    CANDIDATE_URLS+=("https://api.z.ai/api/monitor/usage/quota/limit")
+    CANDIDATE_URLS+=("https://open.bigmodel.cn/api/monitor/usage/quota/limit")
+  fi
+  response=""
+  for url in "${CANDIDATE_URLS[@]}"; do
+    response=$(curl -sf --max-time 10 \
+      -H "Authorization: ${API_KEY}" \
+      -H "Content-Type: application/json" \
+      -H "Accept-Language: en-US,en" \
+      "$url" 2>/dev/null) && [ -n "$response" ] && break
+    response=""
+  done
 
   [ -z "$response" ] && exit 0
 

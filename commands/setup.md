@@ -686,27 +686,33 @@ Write-Host "Standalone ZHIPU_API_KEY: $(if ($zhipuKey) { 'found' } else { 'missi
 
 ### Resolving conflicts
 
-Run through these checks in order and stop at the first match:
+Unified mode (ANTHROPIC_API_KEY + hostname match on ANTHROPIC_BASE_URL) takes precedence over standalone DEEPSEEK_API_KEY / ZHIPU_API_KEY. Standalone keys are fallback only. Run through these checks in order and stop at the first match:
 
-1. **`ANTHROPIC_BASE_URL` is empty or `provider` is `unknown`** AND no standalone key is set → skip this step entirely, continue to Step 5.
+1. **`provider` is `deepseek` or `zhipu`** AND `ANTHROPIC_API_KEY` is present AND `ANTHROPIC_API_KEY` does NOT start with `sk-ant-` → auto-configure unified mode. If a stale standalone key (`DEEPSEEK_API_KEY` / `ZHIPU_API_KEY`) is also set, tell the user:
 
-2. **Both `DEEPSEEK_API_KEY` and `ZHIPU_API_KEY` are set** → conflict. Ask the user which provider they want, then unset the other key in `settings.json` before continuing. Auto-detection cannot resolve this.
+   > Detected {provider} via ANTHROPIC_BASE_URL — configuring unified usage display. The standalone {DEEPSEEK_API_KEY/ZHIPU_API_KEY} in your settings is unused; consider removing it so a single key is the source of truth.
 
-3. **`provider` is `deepseek` or `zhipu`** AND the opposite standalone key is also set (e.g. URL is DeepSeek but `ZHIPU_API_KEY` is present) → conflict. Ask the user which signal is authoritative, remove the stale one, then re-run setup.
+   Proceed with sub-steps below using `ANTHROPIC_API_KEY` (writes `usage-snapshot.json`).
 
-4. **`provider` is `deepseek` or `zhipu`** but `ANTHROPIC_API_KEY` looks like an Anthropic key (starts with `sk-ant-`) → the URL and key don't match. Tell the user:
+2. **`provider` is `deepseek` or `zhipu`** but `ANTHROPIC_API_KEY` looks like an Anthropic key (starts with `sk-ant-`) → the URL and key don't match. Tell the user:
 
    > `ANTHROPIC_BASE_URL` points to {provider}, but `ANTHROPIC_API_KEY` looks like an Anthropic key. Update either the URL or the key in `~/.claude/settings.json`, then re-run `/claude-hud:setup`.
 
-5. **`provider` is `unknown`** but a standalone key (`DEEPSEEK_API_KEY` or `ZHIPU_API_KEY`) is set → the unified mode can't detect a provider, but the standalone fetch script will still work. Continue with sub-steps below using whichever standalone key is set (DeepSeek writes `deepseek-snapshot.json`, ZhipuAI writes `usage-snapshot.json`).
+3. **`provider` is `unknown`** AND both `DEEPSEEK_API_KEY` and `ZHIPU_API_KEY` are set → conflict. Ask the user which provider they want, unset the other key, then re-run setup.
 
-6. **`provider` is detected and `ANTHROPIC_API_KEY` is present** → auto-configure. Tell the user "Detected {provider} — configuring usage display..." and proceed with sub-steps below. Do NOT ask for the API key.
+4. **`provider` is `unknown`** AND exactly one standalone key (`DEEPSEEK_API_KEY` or `ZHIPU_API_KEY`) is set → standalone fallback. Tell the user:
 
-7. **`provider` is detected but `ANTHROPIC_API_KEY` is missing** → tell the user:
+   > ANTHROPIC_BASE_URL does not point to a known provider hostname; falling back to standalone {key}. Consider pointing ANTHROPIC_BASE_URL directly at the provider so a single key is the source of truth.
+
+   Continue with sub-steps below using the standalone key (DeepSeek writes `deepseek-snapshot.json`, ZhipuAI writes `usage-snapshot.json`).
+
+5. **`provider` is detected but `ANTHROPIC_API_KEY` is missing AND no matching standalone key** → tell the user:
 
    > Detected {provider} but `ANTHROPIC_API_KEY` not found in settings. Please configure it in `~/.claude/settings.json` under `env`, then re-run `/claude-hud:setup`.
 
    Continue to Step 5.
+
+6. **No provider detected and no standalone key** → skip this step entirely, continue to Step 5.
 
 ### Auto-configure sub-steps
 
