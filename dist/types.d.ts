@@ -76,6 +76,7 @@ export interface UsageData {
     fiveHourResetAt: Date | null;
     sevenDayResetAt: Date | null;
     balanceLabel?: string | null;
+    stale?: boolean;
 }
 export interface ExternalUsageSnapshot {
     five_hour?: {

@@ -18,10 +18,22 @@ fi
 
 mkdir -p "$(dirname "$SNAPSHOT_FILE")"
 
-# ── Detect provider ──────────────────────────────────────────────
-lower_url=$(echo "$BASE_URL" | tr '[:upper:]' '[:lower:]')
+# ── Detect provider (strict hostname match via node URL parser) ──
+# Avoids false positives when a custom proxy URL contains "deepseek" /
+# "bigmodel" / "z.ai" as a substring without actually being that provider.
+PROVIDER=$(node -e "
+const u = process.argv[1] || '';
+let p = '';
+try {
+  const h = new URL(u).hostname.toLowerCase();
+  if (h === 'api.deepseek.com' || h.endsWith('.deepseek.com')) p = 'deepseek';
+  else if (h === 'api.z.ai' || h.endsWith('.z.ai') ||
+           h === 'open.bigmodel.cn' || h.endsWith('.bigmodel.cn')) p = 'zhipu';
+} catch {}
+console.log(p);
+" "$BASE_URL" 2>/dev/null || echo "")
 
-if echo "$lower_url" | grep -q 'deepseek'; then
+if [ "$PROVIDER" = "deepseek" ]; then
   # ── DeepSeek: balance API ──────────────────────────────────────
   API_URL="${DEEPSEEK_API_URL:-https://api.deepseek.com/user/balance}"
   response=$(curl -sf --max-time 10 \
@@ -52,7 +64,7 @@ if echo "$lower_url" | grep -q 'deepseek'; then
   require('fs').writeFileSync('$SNAPSHOT_FILE', JSON.stringify(snapshot, null, 2));
   " <<< "$response"
 
-elif echo "$lower_url" | grep -qE '(z\.ai|bigmodel)'; then
+elif [ "$PROVIDER" = "zhipu" ]; then
   # ── ZhipuAI: quota/limit API ───────────────────────────────────
   API_URL="${ZHIPU_API_URL:-https://api.z.ai/api/monitor/usage/quota/limit}"
   response=$(curl -sf --max-time 10 \

@@ -228,15 +228,30 @@ Instead, use `sort -V` (GNU version sort, included with Git for Windows) which a
 
 4. Write the PowerShell wrapper script.
 
-   Claude Code spawns the statusLine subprocess with no console handle attached. On Windows PowerShell 5.1, that makes `[Console]::WindowWidth` throw `System.IO.IOException: The handle is invalid.`, which halts the script before `node` runs — the HUD shows only "initializing..." and no error reaches any log. The macOS/Linux branch sidesteps this with `${cols:-120}` (`stty size` falls back when the controlling terminal is missing); the PowerShell equivalent is `try/catch` around `[Console]::WindowWidth`.
+   Claude Code spawns the statusLine subprocess with no console handle attached. On Windows PowerShell 5.1, that makes `[Console]::WindowWidth` throw `System.IO.IOException: The handle is invalid.`, which halts the script before `node` runs — the HUD shows only "initializing..." and no error reaches any log.
+
+   The wrapper tries three detection methods in order:
+   1. `[Console]::WindowWidth` — works when a console handle is present
+   2. `$Host.UI.RawUI.WindowSize.Width` — works in some non-interactive sessions
+   3. `cmd /c 'mode con'` — reads console buffer info directly, most reliable in headless subprocess
+   If none succeed, `COLUMNS` is not set and the Node.js process tries its own detection (including `mode.com con`).
+   The macOS/Linux branch sidesteps this with `${cols:-120}` (`stty size` falls back when the controlling terminal is missing); the PowerShell equivalent is the multi-method fallback chain above.
 
    Inline `powershell -Command "..."` strings in `settings.json` make `try/catch` and multi-line control flow awkward because of nested quoting and the `cmd /s /c` rules that wrap the call. A standalone `.ps1` wrapper is the PowerShell equivalent of the macOS/Linux `bash -c '...'` script body — proper control flow, no JSON-string quoting pressure, and a single source of truth that future PS-side fixes can extend.
 
    The wrapper file at `$claudeDir/plugins/claude-hud/statusline.ps1` should contain:
 
    ```powershell
-   try { $w = [Console]::WindowWidth } catch { $w = 120 }
-   $env:COLUMNS = [Math]::Max(1, $w - 4)
+   $w = $null
+   try { $w = [Console]::WindowWidth } catch {}
+   if (-not $w -or $w -le 0) { try { $w = $Host.UI.RawUI.WindowSize.Width } catch {} }
+   if (-not $w -or $w -le 0) {
+       try {
+           $m = cmd /c 'mode con' 2>$null | Out-String
+           if ($m -match 'Columns:\s+(\d+)') { $w = [int]$Matches[1] }
+       } catch {}
+   }
+   if ($w -and $w -gt 0) { $env:COLUMNS = [Math]::Max(1, $w - 4) }
    $claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
    $pluginDir = (Get-ChildItem (Join-Path $claudeDir 'plugins\cache\*\claude-hud\*') -Directory -ErrorAction SilentlyContinue |
        Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
@@ -254,8 +269,16 @@ Instead, use `sort -V` (GNU version sort, included with Git for Windows) which a
    $wrapperPath = Join-Path $wrapperDir "statusline.ps1"
    $runtimePathLiteral = $runtimePath.Replace("'", "''")
    $wrapperBody = ({
-       try { $w = [Console]::WindowWidth } catch { $w = 120 }
-       $env:COLUMNS = [Math]::Max(1, $w - 4)
+       $w = $null
+       try { $w = [Console]::WindowWidth } catch {}
+       if (-not $w -or $w -le 0) { try { $w = $Host.UI.RawUI.WindowSize.Width } catch {} }
+       if (-not $w -or $w -le 0) {
+           try {
+               $m = cmd /c 'mode con' 2>$null | Out-String
+               if ($m -match 'Columns:\s+(\d+)') { $w = [int]$Matches[1] }
+           } catch {}
+       }
+       if ($w -and $w -gt 0) { $env:COLUMNS = [Math]::Max(1, $w - 4) }
        $claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME '.claude' }
        $pluginDir = (Get-ChildItem (Join-Path $claudeDir 'plugins\cache\*\claude-hud\*') -Directory -ErrorAction SilentlyContinue |
            Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
@@ -594,26 +617,102 @@ SETTINGS="$CLAUDE_DIR/settings.json"
 
 BASE_URL=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS','utf8')); console.log(s.env?.ANTHROPIC_BASE_URL || '')" 2>/dev/null || echo "")
 API_KEY=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS','utf8')); console.log(s.env?.ANTHROPIC_API_KEY || '')" 2>/dev/null || echo "")
+DEEPSEEK_KEY=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS','utf8')); console.log(s.env?.DEEPSEEK_API_KEY || '')" 2>/dev/null || echo "")
+ZHIPU_KEY=$(node -e "const s=JSON.parse(require('fs').readFileSync('$SETTINGS','utf8')); console.log(s.env?.ZHIPU_API_KEY || '')" 2>/dev/null || echo "")
+
+# Strict hostname match — avoids false positives from URLs that happen to
+# contain "deepseek" / "bigmodel" / "z.ai" as substrings without being that
+# provider's actual host.
+PROVIDER=$(node -e "
+const u = process.argv[1] || '';
+let p = 'unknown';
+try {
+  const h = new URL(u).hostname.toLowerCase();
+  if (h === 'api.deepseek.com' || h.endsWith('.deepseek.com')) p = 'deepseek';
+  else if (h === 'api.z.ai' || h.endsWith('.z.ai') ||
+           h === 'open.bigmodel.cn' || h.endsWith('.bigmodel.cn')) p = 'zhipu';
+} catch {}
+console.log(p);
+" "$BASE_URL" 2>/dev/null || echo "unknown")
 
 echo "Base URL: $BASE_URL"
-echo "Provider: $(echo "$BASE_URL" | grep -qi 'deepseek' && echo 'deepseek' || (echo "$BASE_URL" | grep -qi 'bigmodel\|z\.ai' && echo 'zhipu' || echo 'unknown'))"
+echo "Provider: $PROVIDER"
 echo "API key: $([ -n "$API_KEY" ] && echo 'found' || echo 'missing')"
+echo "Standalone DEEPSEEK_API_KEY: $([ -n "$DEEPSEEK_KEY" ] && echo 'found' || echo 'missing')"
+echo "Standalone ZHIPU_API_KEY: $([ -n "$ZHIPU_KEY" ] && echo 'found' || echo 'missing')"
 ```
 
-**If provider is `unknown`** (base URL doesn't match ZhipuAI or DeepSeek): Skip this step. Continue to Step 5.
+**Windows (PowerShell)**:
+```powershell
+$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
+$settingsPath = Join-Path $claudeDir "settings.json"
 
-**If provider is detected and API key is present**: Auto-configure usage display. Tell the user "Detected {provider} — configuring usage display..." and proceed with sub-steps below. Do NOT ask for the API key.
+$baseUrl = ""
+$apiKey = ""
+$deepseekKey = ""
+$zhipuKey = ""
+if (Test-Path $settingsPath) {
+  try {
+    $s = Get-Content $settingsPath -Raw | ConvertFrom-Json
+    if ($s.env) {
+      $baseUrl = $s.env.ANTHROPIC_BASE_URL ?? ""
+      $apiKey = $s.env.ANTHROPIC_API_KEY ?? ""
+      $deepseekKey = $s.env.DEEPSEEK_API_KEY ?? ""
+      $zhipuKey = $s.env.ZHIPU_API_KEY ?? ""
+    }
+  } catch {}
+}
 
-**If provider is detected but API key is missing**: Tell the user:
+# Strict hostname match via the node URL parser.
+$provider = & node -e "
+const u = process.argv[1] || '';
+let p = 'unknown';
+try {
+  const h = new URL(u).hostname.toLowerCase();
+  if (h === 'api.deepseek.com' || h.endsWith('.deepseek.com')) p = 'deepseek';
+  else if (h === 'api.z.ai' || h.endsWith('.z.ai') ||
+           h === 'open.bigmodel.cn' || h.endsWith('.bigmodel.cn')) p = 'zhipu';
+} catch {}
+console.log(p);
+" $baseUrl 2>$null
+if (-not $provider) { $provider = 'unknown' }
 
-> Detected {provider} but `ANTHROPIC_API_KEY` not found in settings. Please configure it in `~/.claude/settings.json` under `env`, then re-run `/claude-hud:setup`.
+Write-Host "Base URL: $baseUrl"
+Write-Host "Provider: $provider"
+Write-Host "API key: $(if ($apiKey) { 'found' } else { 'missing' })"
+Write-Host "Standalone DEEPSEEK_API_KEY: $(if ($deepseekKey) { 'found' } else { 'missing' })"
+Write-Host "Standalone ZHIPU_API_KEY: $(if ($zhipuKey) { 'found' } else { 'missing' })"
+```
 
-Continue to Step 5.
+### Resolving conflicts
+
+Run through these checks in order and stop at the first match:
+
+1. **`ANTHROPIC_BASE_URL` is empty or `provider` is `unknown`** AND no standalone key is set → skip this step entirely, continue to Step 5.
+
+2. **Both `DEEPSEEK_API_KEY` and `ZHIPU_API_KEY` are set** → conflict. Ask the user which provider they want, then unset the other key in `settings.json` before continuing. Auto-detection cannot resolve this.
+
+3. **`provider` is `deepseek` or `zhipu`** AND the opposite standalone key is also set (e.g. URL is DeepSeek but `ZHIPU_API_KEY` is present) → conflict. Ask the user which signal is authoritative, remove the stale one, then re-run setup.
+
+4. **`provider` is `deepseek` or `zhipu`** but `ANTHROPIC_API_KEY` looks like an Anthropic key (starts with `sk-ant-`) → the URL and key don't match. Tell the user:
+
+   > `ANTHROPIC_BASE_URL` points to {provider}, but `ANTHROPIC_API_KEY` looks like an Anthropic key. Update either the URL or the key in `~/.claude/settings.json`, then re-run `/claude-hud:setup`.
+
+5. **`provider` is `unknown`** but a standalone key (`DEEPSEEK_API_KEY` or `ZHIPU_API_KEY`) is set → the unified mode can't detect a provider, but the standalone fetch script will still work. Continue with sub-steps below using whichever standalone key is set (DeepSeek writes `deepseek-snapshot.json`, ZhipuAI writes `usage-snapshot.json`).
+
+6. **`provider` is detected and `ANTHROPIC_API_KEY` is present** → auto-configure. Tell the user "Detected {provider} — configuring usage display..." and proceed with sub-steps below. Do NOT ask for the API key.
+
+7. **`provider` is detected but `ANTHROPIC_API_KEY` is missing** → tell the user:
+
+   > Detected {provider} but `ANTHROPIC_API_KEY` not found in settings. Please configure it in `~/.claude/settings.json` under `env`, then re-run `/claude-hud:setup`.
+
+   Continue to Step 5.
 
 ### Auto-configure sub-steps
 
 **4.5a: Copy unified fetch script**
 
+**macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 PLUGIN_DIR=$(ls -d "$CLAUDE_DIR"/plugins/cache/*/claude-hud/*/ 2>/dev/null | sort -V | tail -1)
@@ -628,17 +727,61 @@ if [ -f "$FETCH_SCRIPT" ]; then
 else
   echo "WARN: fetch script not found in plugin, skipping"
 fi
+
+FETCH_JS="$PLUGIN_DIR/scripts/fetch-usage.js"
+if [ -f "$FETCH_JS" ]; then
+  cp "$FETCH_JS" "$SCRIPT_DEST/fetch-usage.js"
+  echo "OK: fetch JS script installed"
+fi
+```
+
+**Windows (PowerShell)**:
+```powershell
+$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
+$pluginDir = (Get-ChildItem (Join-Path $claudeDir "plugins\cache\*\claude-hud\*") -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
+    Sort-Object { [version]$_.Name } -Descending |
+    Select-Object -First 1).FullName
+$scriptDest = Join-Path $claudeDir "plugins\claude-hud"
+New-Item -ItemType Directory -Force -Path $scriptDest | Out-Null
+
+$fetchJs = if ($pluginDir) { Join-Path $pluginDir "scripts\fetch-usage.js" } else { $null }
+if ($fetchJs -and (Test-Path $fetchJs)) {
+  Copy-Item $fetchJs (Join-Path $scriptDest "fetch-usage.js") -Force
+  Write-Host "OK: fetch script installed"
+} else {
+  Write-Host "WARN: fetch script not found in plugin, skipping"
+}
 ```
 
 **4.5b: Test API connection**
 
+**macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 ANTHROPIC_API_KEY="$API_KEY" ANTHROPIC_BASE_URL="$BASE_URL" "$CLAUDE_DIR/plugins/claude-hud/fetch-usage.sh" 2>/dev/null && echo "OK: API connected" || echo "WARN: API test failed"
 cat "$CLAUDE_DIR/plugins/claude-hud/usage-snapshot.json" 2>/dev/null
 ```
 
-If the test fails, warn the user but continue — it may work after restart.
+**Windows (PowerShell)**:
+```powershell
+$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
+$scriptPath = Join-Path $claudeDir "plugins\claude-hud\fetch-usage.js"
+if (Test-Path $scriptPath) {
+  $env:ANTHROPIC_API_KEY = $apiKey
+  $env:ANTHROPIC_BASE_URL = $baseUrl
+  node $scriptPath 2>$null
+  if ($LASTEXITCODE -eq 0) { Write-Host "OK: API connected" } else { Write-Host "WARN: API test failed" }
+} else { Write-Host "WARN: no fetch script found" }
+$snapshot = Join-Path $claudeDir "plugins\claude-hud\usage-snapshot.json"
+if (Test-Path $snapshot) { Get-Content $snapshot } else { Write-Host "No snapshot written" }
+```
+
+If the test fails (no snapshot written, or exit code non-zero), **do NOT proceed to 4.5c/4.5d**. The detection likely matched a URL that isn't actually that provider, or the API key doesn't match. Tell the user:
+
+> Provider auto-detect picked {provider}, but the test API call failed. Skipping usage-display configuration to avoid a broken hook. If you do want this provider, verify `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` in `~/.claude/settings.json`, then re-run `/claude-hud:setup` (or run `/claude-hud:usage-setup` to retry just this step).
+
+Then continue to Step 5.
 
 **4.5c: Update config.json** (merge with what was written in Step 4)
 
@@ -656,7 +799,8 @@ Add to the existing `plugins/claude-hud/config.json`:
 }
 ```
 
-Replace `<absolute path>` with the fully expanded path: `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/usage-snapshot.json` (no `~`).
+**macOS/Linux**: Replace `<absolute path>` with `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/usage-snapshot.json` (no `~`).
+**Windows (PowerShell)**: Replace `<absolute path>` with `Join-Path $claudeDir "plugins\claude-hud\usage-snapshot.json"` (fully expanded, no `~`).
 
 **4.5d: Update settings.json** (merge with what was written in Step 3)
 
@@ -664,7 +808,9 @@ Add to the existing settings:
 
 1. Add `ANTHROPIC_API_KEY` to `env` if not already there (same value as the detected key).
 
-2. Add the fetch hook to `hooks.PreToolUse`. If a PreToolUse entry with matcher `Bash|Read|Write|Edit` already exists, append the hook to its `hooks` array if not already present. Remove any old `fetch-zhipu-usage.sh` or `fetch-deepseek-usage.sh` hooks. Otherwise add the full entry:
+2. Add the fetch hook to `hooks.PreToolUse`. If a PreToolUse entry with matcher `Bash|Read|Write|Edit` already exists, append the hook to its `hooks` array if not already present. Remove any old `fetch-zhipu-usage.sh` or `fetch-deepseek-usage.sh` hooks. Otherwise add the full entry.
+
+**macOS/Linux** — use the `.sh` script:
 ```json
 {
   "hooks": {
@@ -679,6 +825,24 @@ Add to the existing settings:
   }
 }
 ```
+
+**Windows** — use the `.js` script via `node`:
+```json
+{
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Bash|Read|Write|Edit",
+      "hooks": [{
+        "type": "command",
+        "command": "node ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/fetch-usage.js",
+        "async": true
+      }]
+    }]
+  }
+}
+```
+
+**Note**: On macOS/Linux, the `.js` hook form (`node .../fetch-usage.js`) also works. The `.sh` form is preferred for backward compatibility. On Windows, only the `.js` form works.
 
 After completing these sub-steps, tell the user based on the detected provider:
 
@@ -745,7 +909,7 @@ Use AskUserQuestion:
      ```powershell
      '{}' | & cmd.exe /c '{GENERATED_COMMAND}'
      ```
-     If you see either error, the existing setup predates the wrapper-based command format. Re-run `/claude-hud:setup` to regenerate `statusline.ps1` with `try/catch` and the corrected version-dir glob. See [#521](https://github.com/jarrodwatts/claude-hud/issues/521).
+     If you see either error, the existing setup predates the wrapper-based command format. Re-run `/claude-hud:setup` to regenerate `statusline.ps1` with the multi-method width detection (`[Console]::WindowWidth` → `$Host.UI.RawUI` → `mode con`) and the corrected version-dir glob. See [#521](https://github.com/jarrodwatts/claude-hud/issues/521).
 
    **Windows: PowerShell execution policy error**:
    - Run: `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`

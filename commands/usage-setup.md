@@ -9,6 +9,7 @@ This command auto-detects your provider (ZhipuAI or DeepSeek) from `ANTHROPIC_BA
 
 ### Step 1: Detect provider and API key
 
+**macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SETTINGS="$CLAUDE_DIR/settings.json"
@@ -20,38 +21,104 @@ echo "Base URL: $BASE_URL"
 echo "API key: $([ -n "$API_KEY" ] && echo 'found' || echo 'missing')"
 ```
 
+**Windows (PowerShell)**:
+```powershell
+$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
+$settingsPath = Join-Path $claudeDir "settings.json"
+$baseUrl = ""
+$apiKey = ""
+if (Test-Path $settingsPath) {
+  try {
+    $s = Get-Content $settingsPath -Raw | ConvertFrom-Json
+    if ($s.env) {
+      $baseUrl = $s.env.ANTHROPIC_BASE_URL ?? ""
+      $apiKey = $s.env.ANTHROPIC_API_KEY ?? ""
+    }
+  } catch {}
+}
+Write-Host "Base URL: $baseUrl"
+Write-Host "API key: $(if ($apiKey) { 'found' } else { 'missing' })"
+```
+
 **If `API_KEY` is empty**: Stop and tell the user:
 
 > No API key found. Set `ANTHROPIC_API_KEY` in your settings first, then re-run this command.
 
-**If `BASE_URL` is empty or doesn't match any known provider**: Stop and tell the user:
+**Detect provider by strict hostname match** (avoids false positives from URLs that happen to contain "deepseek" / "bigmodel" / "z.ai" as substrings):
 
-> No recognized provider detected from `ANTHROPIC_BASE_URL`. Currently supported: ZhipuAI (z.ai / bigmodel) and DeepSeek. Make sure your `ANTHROPIC_BASE_URL` is configured in settings, then re-run.
+**macOS/Linux**:
+```bash
+PROVIDER=$(node -e "
+const u = process.argv[1] || '';
+let p = '';
+try {
+  const h = new URL(u).hostname.toLowerCase();
+  if (h === 'api.deepseek.com' || h.endsWith('.deepseek.com')) p = 'deepseek';
+  else if (h === 'api.z.ai' || h.endsWith('.z.ai') ||
+           h === 'open.bigmodel.cn' || h.endsWith('.bigmodel.cn')) p = 'zhipu';
+} catch {}
+console.log(p);
+" "$BASE_URL" 2>/dev/null || echo "")
+echo "Provider: $PROVIDER"
+```
 
-Detect the provider:
-- `BASE_URL` contains `deepseek` → DeepSeek (balance display)
-- `BASE_URL` contains `z.ai` or `bigmodel` → ZhipuAI (rate-limit % display)
+**Windows (PowerShell)**:
+```powershell
+$provider = & node -e "
+const u = process.argv[1] || '';
+let p = '';
+try {
+  const h = new URL(u).hostname.toLowerCase();
+  if (h === 'api.deepseek.com' || h.endsWith('.deepseek.com')) p = 'deepseek';
+  else if (h === 'api.z.ai' || h.endsWith('.z.ai') ||
+           h === 'open.bigmodel.cn' || h.endsWith('.bigmodel.cn')) p = 'zhipu';
+} catch {}
+console.log(p);
+" $baseUrl 2>$null
+Write-Host "Provider: $provider"
+```
+
+**If `BASE_URL` is empty or `PROVIDER` is empty**: Stop and tell the user:
+
+> No recognized provider detected from `ANTHROPIC_BASE_URL`. Currently supported hostnames: `api.deepseek.com` (and subdomains), `api.z.ai` / `open.bigmodel.cn` (and subdomains). Custom proxy URLs containing "deepseek" / "bigmodel" / "z.ai" as substrings will NOT match — set `DEEPSEEK_API_KEY` or `ZHIPU_API_KEY` instead if you want standalone mode, or point `ANTHROPIC_BASE_URL` directly at the provider.
+
+**Conflict check**:
+
+- If `ANTHROPIC_API_KEY` starts with `sk-ant-` (looks like an Anthropic key), warn the user that the URL/key pair doesn't match and ask them to fix `settings.json` before re-running.
+- If both `DEEPSEEK_API_KEY` and `ZHIPU_API_KEY` are set, ask the user which to keep and remove the other.
+- If `PROVIDER` matches DeepSeek but `ZHIPU_API_KEY` is set (or vice versa), ask the user which signal is authoritative.
 
 ### Step 2: Detect plugin install path
 
+**macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 PLUGIN_DIR=$(ls -d "$CLAUDE_DIR"/plugins/cache/*/claude-hud/*/ 2>/dev/null | sort -V | tail -1)
 echo "Plugin dir: $PLUGIN_DIR"
 ```
 
+**Windows (PowerShell)**:
+```powershell
+$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
+$pluginDir = (Get-ChildItem (Join-Path $claudeDir "plugins\cache\*\claude-hud\*") -Directory -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
+    Sort-Object { [version]$_.Name } -Descending |
+    Select-Object -First 1).FullName
+Write-Host "Plugin dir: $pluginDir"
+```
+
 If empty, the plugin is not installed. Ask user to run `/plugin install claude-hud` first, then re-run.
 
 ### Step 3: Copy fetch script
 
+**macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SCRIPT_DEST="$CLAUDE_DIR/plugins/claude-hud"
 mkdir -p "$SCRIPT_DEST"
 
-FETCH_SCRIPT=$(ls "$PLUGIN_DIR"scripts/fetch-usage.sh 2>/dev/null || echo "")
-
-if [ -n "$FETCH_SCRIPT" ]; then
+FETCH_SCRIPT="$PLUGIN_DIR/scripts/fetch-usage.sh"
+if [ -n "$FETCH_SCRIPT" ] && [ -f "$FETCH_SCRIPT" ]; then
   cp "$FETCH_SCRIPT" "$SCRIPT_DEST/fetch-usage.sh"
   chmod +x "$SCRIPT_DEST/fetch-usage.sh"
   echo "OK: fetch script installed"
@@ -59,15 +126,50 @@ else
   echo "ERROR: fetch-usage.sh not found in plugin"
   exit 1
 fi
+
+FETCH_JS="$PLUGIN_DIR/scripts/fetch-usage.js"
+if [ -f "$FETCH_JS" ]; then
+  cp "$FETCH_JS" "$SCRIPT_DEST/fetch-usage.js"
+  echo "OK: fetch JS script installed"
+fi
+```
+
+**Windows (PowerShell)**:
+```powershell
+$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
+$scriptDest = Join-Path $claudeDir "plugins\claude-hud"
+New-Item -ItemType Directory -Force -Path $scriptDest | Out-Null
+
+$fetchJs = if ($pluginDir) { Join-Path $pluginDir "scripts\fetch-usage.js" } else { $null }
+if ($fetchJs -and (Test-Path $fetchJs)) {
+  Copy-Item $fetchJs (Join-Path $scriptDest "fetch-usage.js") -Force
+  Write-Host "OK: fetch script installed"
+} else {
+  Write-Host "ERROR: fetch-usage.js not found in plugin"
+  exit 1
+}
 ```
 
 ### Step 4: Test API connection
 
+**macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 ANTHROPIC_API_KEY="$API_KEY" ANTHROPIC_BASE_URL="$BASE_URL" "$CLAUDE_DIR/plugins/claude-hud/fetch-usage.sh"
 echo "Exit code: $?"
 cat "$CLAUDE_DIR/plugins/claude-hud/usage-snapshot.json" 2>/dev/null || echo "No snapshot written"
+```
+
+**Windows (PowerShell)**:
+```powershell
+$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
+$scriptPath = Join-Path $claudeDir "plugins\claude-hud\fetch-usage.js"
+$env:ANTHROPIC_API_KEY = $apiKey
+$env:ANTHROPIC_BASE_URL = $baseUrl
+node $scriptPath 2>$null
+if ($LASTEXITCODE -eq 0) { Write-Host "OK: API connected" } else { Write-Host "WARN: API test failed" }
+$snapshot = Join-Path $claudeDir "plugins\claude-hud\usage-snapshot.json"
+if (Test-Path $snapshot) { Get-Content $snapshot } else { Write-Host "No snapshot written" }
 ```
 
 If exit code is 0 and snapshot file exists, API works. If not, the API key may be wrong — ask user to verify.
@@ -89,7 +191,9 @@ Merge in:
 }
 ```
 
-Replace `<absolute path>` with the fully expanded path (`$CLAUDE_DIR/plugins/claude-hud/usage-snapshot.json`, no `~`).
+**macOS/Linux**: Replace `<absolute path>` with `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/usage-snapshot.json` (no `~`).
+
+**Windows (PowerShell)**: Replace `<absolute path>` with `Join-Path $claudeDir "plugins\claude-hud\usage-snapshot.json"` (fully expanded, no `~`).
 
 ### Step 6: Update settings.json
 
@@ -97,6 +201,7 @@ Read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json`.
 
 Add or update the PreToolUse hook — merge with existing hooks, do not replace:
 
+**macOS/Linux** — use the `.sh` script:
 ```json
 {
   "hooks": {
@@ -107,6 +212,26 @@ Add or update the PreToolUse hook — merge with existing hooks, do not replace:
           {
             "type": "command",
             "command": "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/fetch-usage.sh",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Windows** — use the `.js` script via `node`:
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/fetch-usage.js",
             "async": true
           }
         ]

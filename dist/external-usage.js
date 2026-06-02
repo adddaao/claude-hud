@@ -199,9 +199,7 @@ export function getUsageFromExternalSnapshot(config, now = Date.now()) {
             return null;
         }
         const freshnessMs = config.display.externalUsageFreshnessMs;
-        if (now - updatedAt > freshnessMs) {
-            return null;
-        }
+        const stale = now - updatedAt > freshnessMs;
         const fiveHour = parseUsagePercent(parsed.five_hour?.used_percentage);
         const sevenDay = parseUsagePercent(parsed.seven_day?.used_percentage);
         const balanceLabel = sanitizeBalanceLabel(parsed.balance_label);
@@ -224,6 +222,9 @@ export function getUsageFromExternalSnapshot(config, now = Date.now()) {
         };
         if (balanceLabel !== null) {
             usage.balanceLabel = balanceLabel;
+        }
+        if (stale) {
+            usage.stale = true;
         }
         return usage;
     }

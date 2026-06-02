@@ -80,16 +80,49 @@ Claude HUD 支持在非 Anthropic 官方模型（如 ZhipuAI、DeepSeek）下显
 
 ---
 
-## 安装
+## 第一次安装流程
 
-在 Claude Code 实例中，运行以下命令：
+适用于一台什么都没装过的机器。步骤 0 在系统 shell 里完成（装 Claude Code 和 Node.js），步骤 1–4 在 Claude Code 会话里完成。
 
-**步骤 1：添加市场**
+### 步骤 0：准备运行环境
+
+需要先装好 Claude Code 本身和 Node.js（HUD 用 Node.js 跑）。
+
+**0a — 安装 Claude Code（v1.0.80 或更新版本）**
+
+参照官方文档安装：<https://docs.claude.com/en/docs/claude-code/setup>
+
+安装完成后在终端运行 `claude` 能进入交互界面即代表 OK。
+
+**0b — 安装 Node.js 18+（或 Bun）**
+
+| 平台 | 推荐命令 |
+|------|---------|
+| macOS | `brew install node` |
+| Linux (Debian/Ubuntu) | `sudo apt-get install -y nodejs` |
+| Linux (Fedora/RHEL) | `sudo dnf install -y nodejs` |
+| Linux (Arch) | `sudo pacman -S nodejs` |
+| Windows | `winget install OpenJS.NodeJS.LTS` |
+
+也可以直接从 <https://nodejs.org/> 下载安装包。装完之后 `node -v` 应该返回 `v18` 或更高。
+
+Windows 上 **不支持 Bun**，必须用 Node.js。macOS / Linux 上二选一即可。
+
+**0c — 登录 Claude Code**
+
+第一次运行 `claude` 时按提示登录账号、选好工作目录，确认能在终端里看到 Claude Code 的输入框。
+
+如果使用第三方提供商（ZhipuAI / DeepSeek），现在就把 `ANTHROPIC_BASE_URL` 和 `ANTHROPIC_API_KEY` 填到 `~/.claude/settings.json` 的 `env` 字段里——后续步骤 3 会自动识别。Anthropic 官方账号跳过这一步。
+
+### 步骤 1：添加插件市场
+
 ```
-/plugin marketplace add jarrodwatts/claude-hud
+/plugin marketplace add adddaao/claude-hud
 ```
 
-**步骤 2：安装插件**
+这会把 `adddaao/claude-hud` 注册为本地可用的插件来源。
+
+### 步骤 2：安装插件
 
 <details>
 <summary><strong>⚠️ Linux 用户：请先点击此处</strong></summary>
@@ -99,7 +132,7 @@ Claude HUD 支持在非 Anthropic 官方模型（如 ZhipuAI、DeepSeek）下显
 EXDEV: cross-device link not permitted
 ```
 
-**修复方法**：在安装前设置 TMPDIR：
+**修复方法**：在启动 Claude Code 前设置 TMPDIR：
 ```bash
 mkdir -p ~/.cache/tmp && TMPDIR=~/.cache/tmp claude
 ```
@@ -112,16 +145,26 @@ mkdir -p ~/.cache/tmp && TMPDIR=~/.cache/tmp claude
 /plugin install claude-hud
 ```
 
-安装完成后，重新加载插件：
+安装完成后，重新加载插件以激活命令：
 
 ```
 /reload-plugins
 ```
 
-**步骤 3：配置状态栏**
+### 步骤 3：配置状态栏
+
 ```
 /claude-hud:setup
 ```
+
+这个命令会自动完成：
+
+1. 检测 JavaScript 运行时（Node.js / Bun）
+2. 在 `~/.claude/settings.json` 中写入 `statusLine` 字段，指向当前最新版本的 claude-hud 入口
+3. **自动检测 `ANTHROPIC_BASE_URL`**：如果是 ZhipuAI / DeepSeek 等第三方提供商，会同时安装 fetch 脚本、写入 `externalUsagePath`、注册 PreToolUse hook，一步到位
+4. 引导你选择布局预设和可选元素（工具、Agent、待办等）
+
+后续插件升级时无需重新执行 setup——启动脚本会自动定位到最新版本。
 
 <details>
 <summary><strong>⚠️ Windows 用户：如果 setup 提示未找到 JavaScript 运行时，请点击此处</strong></summary>
@@ -134,9 +177,23 @@ winget install OpenJS.NodeJS.LTS
 
 </details>
 
-完成！重启 Claude Code 以加载新的 statusLine 配置，HUD 将会出现。
+### 步骤 4：重启 Claude Code
 
-在 Windows 上，setup 写入新的 `statusLine` 配置后，请完整重启 Claude Code。
+完整重启 Claude Code（macOS 上需完全退出后再次运行 `claude`），新的 statusLine 配置才会生效。重启后 HUD 会出现在输入框下方。
+
+### 后续升级
+
+插件市场拉取到新版本后，重新执行 `/plugin install claude-hud` + `/reload-plugins` 即可。`statusLine` 配置写入的是自动解析最新版本的启动脚本，不需要再次运行 `/claude-hud:setup`。
+
+### 何时需要单独运行 `/claude-hud:usage-setup`
+
+`/claude-hud:setup` 已经内置了第三方提供商的自动配置，下面这些场景才需要单独执行 `/claude-hud:usage-setup`：
+
+- 切换提供商（如 DeepSeek ↔ ZhipuAI）后，更新 fetch 脚本和快照路径
+- `ANTHROPIC_API_KEY` 失效或被替换，需要重新验证连通性
+- 首次安装时还没有 `ANTHROPIC_BASE_URL`，事后才接入第三方提供商
+
+Anthropic 官方账号永远不需要执行这一步。
 
 ---
 

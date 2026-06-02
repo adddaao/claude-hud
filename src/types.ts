@@ -83,6 +83,7 @@ export interface UsageData {
   fiveHourResetAt: Date | null;
   sevenDayResetAt: Date | null;
   balanceLabel?: string | null;  // optional raw balance text (e.g. "¥6.35")
+  stale?: boolean;  // true when snapshot age exceeds freshness threshold
 }
 
 export interface ExternalUsageSnapshot {

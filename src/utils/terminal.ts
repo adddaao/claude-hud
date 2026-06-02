@@ -2,6 +2,11 @@ import { execSync } from 'node:child_process';
 
 export const UNKNOWN_TERMINAL_WIDTH = null;
 
+// Cache mode.com result for 5 seconds to avoid spawning a process on every render.
+let cachedModeCols: number | null | undefined;
+let cachedModeExpiresAt = 0;
+const MODE_CACHE_TTL_MS = 5_000;
+
 function parseEnvColumns(): number | null {
   const envColumns = Number.parseInt(process.env.COLUMNS ?? '', 10);
   return Number.isFinite(envColumns) && envColumns > 0 ? envColumns : null;
@@ -46,44 +51,62 @@ function detectViaStty(): number | null {
   return null;
 }
 
-function detectViaMode(): number | null {
+function detectViaModeUncached(): number | null {
   if (process.platform !== 'win32') return null;
   try {
-    const result = execSync('mode con', {
+    const result = execSync('mode.com con', {
       encoding: 'utf8',
       timeout: 500,
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     });
-    const match = result.match(/Columns:\s+(\d+)/);
+    const match = result.match(/Columns:\s+(\d+)/i);
     if (match) {
       const cols = parseInt(match[1], 10);
       if (cols > 0) return cols;
     }
   } catch {
-    // mode con not available
+    // mode.com not available or no console
   }
   return null;
 }
 
-function detectTerminalWidth(): number | null {
-  return detectViaTput() ?? detectViaStty() ?? detectViaMode();
+function detectViaMode(): number | null {
+  const now = Date.now();
+  if (cachedModeCols !== undefined && now < cachedModeExpiresAt) {
+    return cachedModeCols;
+  }
+  cachedModeCols = detectViaModeUncached();
+  cachedModeExpiresAt = now + MODE_CACHE_TTL_MS;
+  return cachedModeCols;
 }
 
 export function getTerminalWidth(options: { preferEnv?: boolean; fallback?: number | null } = {}): number | null {
   const { preferEnv = false, fallback = null } = options;
 
+  const streamCols = parseStreamColumns(process.stdout?.columns)
+    ?? parseStreamColumns(process.stderr?.columns);
+  const envCols = parseEnvColumns();
+
+  // On Windows, try mode.com detection early — it's more reliable than
+  // env/stream columns when running as a headless subprocess. Result is cached
+  // to avoid spawning mode.com on every render call.
+  const modeCols = process.platform === 'win32' ? detectViaMode() : null;
+
   if (preferEnv) {
-    return parseEnvColumns()
-      ?? parseStreamColumns(process.stdout?.columns)
-      ?? parseStreamColumns(process.stderr?.columns)
-      ?? detectTerminalWidth()
+    return envCols
+      ?? streamCols
+      ?? modeCols
+      ?? detectViaTput()
+      ?? detectViaStty()
       ?? fallback;
   }
 
-  return parseStreamColumns(process.stdout?.columns)
-    ?? parseStreamColumns(process.stderr?.columns)
-    ?? parseEnvColumns()
-    ?? detectTerminalWidth()
+  return streamCols
+    ?? envCols
+    ?? modeCols
+    ?? detectViaTput()
+    ?? detectViaStty()
     ?? fallback;
 }
 

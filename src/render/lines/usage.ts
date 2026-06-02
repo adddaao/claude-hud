@@ -2,7 +2,7 @@ import type { RenderContext } from "../../types.js";
 import { isLimitReached } from "../../types.js";
 import type { MessageKey } from "../../i18n/types.js";
 import { shouldHideUsage } from "../../stdin.js";
-import { critical, label, getQuotaColor, quotaBar, RESET } from "../colors.js";
+import { critical, label, getQuotaColor, quotaBar, RESET, DIM } from "../colors.js";
 import { getAdaptiveBarWidth } from "../../utils/terminal.js";
 import { t } from "../../i18n/index.js";
 import { progressLabel } from "./label-align.js";
@@ -31,13 +31,15 @@ export function renderUsageLine(
     return null;
   }
 
+  const stale = ctx.usageData.stale === true;
   const usageLabel = progressLabel("label.usage", colors, alignLabels);
+  const renderBalance = (text: string) => stale ? label(text, colors) : text;
 
   const hasUsageData = ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null;
   if (!hasUsageData && ctx.usageData.balanceLabel) {
-    return `${usageLabel} ${ctx.usageData.balanceLabel}`;
+    return `${usageLabel} ${renderBalance(ctx.usageData.balanceLabel)}`;
   }
-  const balancePrefix = ctx.usageData.balanceLabel ? `${ctx.usageData.balanceLabel} ` : '';
+  const balancePrefix = ctx.usageData.balanceLabel ? `${renderBalance(ctx.usageData.balanceLabel)} ` : '';
 
   const timeFormat = normalizeTimeFormat(display?.timeFormat);
   const showResetLabel = display?.showResetLabel ?? true;
@@ -69,7 +71,7 @@ export function renderUsageLine(
   const effectiveUsage = Math.max(fiveHour ?? 0, sevenDay ?? 0);
   if (effectiveUsage < threshold) {
     if (ctx.usageData.balanceLabel) {
-      return `${usageLabel} ${ctx.usageData.balanceLabel}`;
+      return `${usageLabel} ${renderBalance(ctx.usageData.balanceLabel)}`;
     }
     return null;
   }
@@ -78,10 +80,10 @@ export function renderUsageLine(
 
   if (usageCompact) {
     const fiveHourPart = fiveHour !== null
-      ? formatCompactWindowPart("5h", fiveHour, ctx.usageData.fiveHourResetAt, FIVE_HOUR_WINDOW_MS, timeFormat, colors, usageValueMode)
+      ? formatCompactWindowPart("5h", fiveHour, ctx.usageData.fiveHourResetAt, FIVE_HOUR_WINDOW_MS, timeFormat, colors, usageValueMode, stale)
       : null;
     const sevenDayPart = (sevenDay !== null && (fiveHour === null || sevenDay >= sevenDayThreshold))
-      ? formatCompactWindowPart("7d", sevenDay, ctx.usageData.sevenDayResetAt, SEVEN_DAY_WINDOW_MS, timeFormat, colors, usageValueMode)
+      ? formatCompactWindowPart("7d", sevenDay, ctx.usageData.sevenDayResetAt, SEVEN_DAY_WINDOW_MS, timeFormat, colors, usageValueMode, stale)
       : null;
 
     if (fiveHourPart && sevenDayPart) {
@@ -112,6 +114,7 @@ export function renderUsageLine(
       forceLabel: true,
       alignLabels,
       usageValueMode,
+      stale,
     });
     return `${usageLabel} ${balancePrefix}${weeklyOnlyPart}`;
   }
@@ -127,6 +130,7 @@ export function renderUsageLine(
     timeFormat,
     showResetLabel,
     usageValueMode,
+    stale,
   });
 
   if (sevenDay !== null && sevenDay >= sevenDayThreshold) {
@@ -144,6 +148,7 @@ export function renderUsageLine(
       forceLabel: true,
       alignLabels,
       usageValueMode,
+      stale,
     });
     return `${usageLabel} ${balancePrefix}${fiveHourPart} | ${sevenDayPart}`;
   }
@@ -159,8 +164,9 @@ function formatCompactWindowPart(
   timeFormat: TimeFormatMode,
   colors?: RenderContext["config"]["colors"],
   usageValueMode: UsageValueMode = 'percent',
+  stale = false,
 ): string {
-  const usageDisplay = formatUsagePercent(percent, colors, usageValueMode);
+  const usageDisplay = formatUsagePercent(percent, colors, usageValueMode, stale);
   const reset = formatWindowTime(resetAt, windowMs, timeFormat);
   const styledLabel = label(`${windowLabel}:`, colors);
   return reset
@@ -172,13 +178,28 @@ function formatUsagePercent(
   percent: number | null,
   colors?: RenderContext["config"]["colors"],
   mode: UsageValueMode = 'percent',
+  stale = false,
 ): string {
   if (percent === null) {
     return label("--", colors);
   }
+  if (stale) {
+    const displayPercent = mode === 'remaining' ? Math.max(0, 100 - percent) : percent;
+    return `${DIM}${displayPercent}%${RESET}`;
+  }
   const color = getQuotaColor(percent, colors);
   const displayPercent = mode === 'remaining' ? Math.max(0, 100 - percent) : percent;
   return `${color}${displayPercent}%${RESET}`;
+}
+
+function dimBar(percent: number, width: number, colors?: RenderContext["config"]["colors"]): string {
+  const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
+  const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  const filled = Math.round((safePercent / 100) * safeWidth);
+  const empty = safeWidth - filled;
+  const filledChar = colors?.barFilled ?? '█';
+  const emptyChar = colors?.barEmpty ?? '░';
+  return `${DIM}${filledChar.repeat(filled)}${emptyChar.repeat(empty)}${RESET}`;
 }
 
 function formatUsageWindowPart({
@@ -195,6 +216,7 @@ function formatUsageWindowPart({
   forceLabel = false,
   alignLabels = false,
   usageValueMode = 'percent',
+  stale = false,
 }: {
   label: string;
   labelKey?: MessageKey;
@@ -209,8 +231,9 @@ function formatUsageWindowPart({
   forceLabel?: boolean;
   alignLabels?: boolean;
   usageValueMode?: UsageValueMode;
+  stale?: boolean;
 }): string {
-  const usageDisplay = formatUsagePercent(percent, colors, usageValueMode);
+  const usageDisplay = formatUsagePercent(percent, colors, usageValueMode, stale);
   const reset = formatWindowTime(resetAt, windowMs, timeFormat);
   const styledLabel = labelKey
     ? progressLabel(labelKey, colors, alignLabels)
@@ -225,9 +248,10 @@ function formatUsageWindowPart({
     : "";
 
   if (usageBarEnabled) {
+    const bar = stale ? dimBar(percent ?? 0, barWidth, colors) : quotaBar(percent ?? 0, barWidth, colors);
     const body = resetSuffix
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} ${resetSuffix}`
-      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+      ? `${bar} ${usageDisplay} ${resetSuffix}`
+      : `${bar} ${usageDisplay}`;
     return forceLabel ? `${styledLabel} ${body}` : body;
   }
 

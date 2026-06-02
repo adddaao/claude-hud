@@ -2,7 +2,7 @@ import type { RenderContext } from '../types.js';
 import { isLimitReached } from '../types.js';
 import { getContextPercent, getBufferedPercent, getModelName, formatModelName, getProviderLabel, getTotalTokens, shouldHideUsage } from '../stdin.js';
 import { getOutputSpeed } from '../speed-tracker.js';
-import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, quotaBar, custom as customColor, RESET } from './colors.js';
+import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, quotaBar, custom as customColor, RESET, DIM } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { renderCostEstimate } from './lines/cost.js';
 import { renderPromptCacheLine } from './lines/prompt-cache.js';
@@ -173,11 +173,13 @@ export function renderSessionLine(ctx: RenderContext): string {
     const usageCompact = display?.usageCompact ?? false;
     const showResetLabel = display?.showResetLabel ?? true;
     const usageValueMode = display?.usageValue ?? 'percent';
+    const stale = ctx.usageData.stale === true;
+    const renderBalance = (text: string) => stale ? label(text, colors) : text;
 
     const hasUsageData = ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null;
-    const balancePrefix = ctx.usageData.balanceLabel ? `${ctx.usageData.balanceLabel} ` : '';
+    const balancePrefix = ctx.usageData.balanceLabel ? `${renderBalance(ctx.usageData.balanceLabel)} ` : '';
     if (!hasUsageData && ctx.usageData.balanceLabel) {
-      parts.push(`${label(t('label.usage'), colors)} ${ctx.usageData.balanceLabel}`);
+      parts.push(`${label(t('label.usage'), colors)} ${renderBalance(ctx.usageData.balanceLabel)}`);
     } else if (isLimitReached(ctx.usageData)) {
       const resetTime = ctx.usageData.fiveHour === 100
         ? formatResetTime(ctx.usageData.fiveHourResetAt, timeFormat)
@@ -202,11 +204,11 @@ export function renderSessionLine(ctx: RenderContext): string {
         const usageBarEnabled = display?.usageBarEnabled ?? true;
         if (usageCompact) {
           const fiveHourPart = fiveHour !== null
-            ? formatCompactWindowPart('5h', fiveHour, ctx.usageData.fiveHourResetAt, timeFormat, colors, usageValueMode)
+            ? formatCompactWindowPart('5h', fiveHour, ctx.usageData.fiveHourResetAt, timeFormat, colors, usageValueMode, stale)
             : null;
           const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
           const sevenDayPart = (sevenDay !== null && (fiveHour === null || sevenDay >= sevenDayThreshold))
-            ? formatCompactWindowPart('7d', sevenDay, ctx.usageData.sevenDayResetAt, timeFormat, colors, usageValueMode)
+            ? formatCompactWindowPart('7d', sevenDay, ctx.usageData.sevenDayResetAt, timeFormat, colors, usageValueMode, stale)
             : null;
 
           if (fiveHourPart && sevenDayPart) {
@@ -229,6 +231,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             showResetLabel,
             forceLabel: true,
             usageValueMode,
+            stale,
           });
           parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${weeklyOnlyPart}`);
         } else {
@@ -242,6 +245,7 @@ export function renderSessionLine(ctx: RenderContext): string {
             timeFormat,
             showResetLabel,
             usageValueMode,
+            stale,
           });
 
           const sevenDayThreshold = display?.sevenDayThreshold ?? 80;
@@ -257,6 +261,7 @@ export function renderSessionLine(ctx: RenderContext): string {
               showResetLabel,
               forceLabel: true,
               usageValueMode,
+              stale,
             });
             parts.push(`${label(t('label.usage'), colors)} ${balancePrefix}${fiveHourPart}`);
             parts.push(sevenDayPart);
@@ -265,7 +270,7 @@ export function renderSessionLine(ctx: RenderContext): string {
           }
         }
       } else if (ctx.usageData.balanceLabel) {
-        parts.push(`${label(t('label.usage'), colors)} ${ctx.usageData.balanceLabel}`);
+        parts.push(`${label(t('label.usage'), colors)} ${renderBalance(ctx.usageData.balanceLabel)}`);
       }
     }
   }
@@ -370,8 +375,9 @@ function formatCompactWindowPart(
   timeFormat: TimeFormatMode,
   colors?: RenderContext['config']['colors'],
   usageValueMode: UsageValueMode = 'percent',
+  stale = false,
 ): string {
-  const usageDisplay = formatUsagePercent(percent, colors, usageValueMode);
+  const usageDisplay = formatUsagePercent(percent, colors, usageValueMode, stale);
   const reset = formatResetTime(resetAt, timeFormat);
   const styledLabel = label(`${windowLabel}:`, colors);
   return reset
@@ -383,13 +389,28 @@ function formatUsagePercent(
   percent: number | null,
   colors?: RenderContext['config']['colors'],
   mode: UsageValueMode = 'percent',
+  stale = false,
 ): string {
   if (percent === null) {
     return label('--', colors);
   }
+  if (stale) {
+    const displayPercent = mode === 'remaining' ? Math.max(0, 100 - percent) : percent;
+    return `${DIM}${displayPercent}%${RESET}`;
+  }
   const color = getQuotaColor(percent, colors);
   const displayPercent = mode === 'remaining' ? Math.max(0, 100 - percent) : percent;
   return `${color}${displayPercent}%${RESET}`;
+}
+
+function dimBar(percent: number, width: number, colors?: RenderContext['config']['colors']): string {
+  const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
+  const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  const filled = Math.round((safePercent / 100) * safeWidth);
+  const empty = safeWidth - filled;
+  const filledChar = colors?.barFilled ?? '█';
+  const emptyChar = colors?.barEmpty ?? '░';
+  return `${DIM}${filledChar.repeat(filled)}${emptyChar.repeat(empty)}${RESET}`;
 }
 
 function formatUsageWindowPart({
@@ -403,6 +424,7 @@ function formatUsageWindowPart({
   showResetLabel,
   forceLabel = false,
   usageValueMode = 'percent',
+  stale = false,
 }: {
   label: string;
   percent: number | null;
@@ -414,8 +436,9 @@ function formatUsageWindowPart({
   showResetLabel: boolean;
   forceLabel?: boolean;
   usageValueMode?: UsageValueMode;
+  stale?: boolean;
 }): string {
-  const usageDisplay = formatUsagePercent(percent, colors, usageValueMode);
+  const usageDisplay = formatUsagePercent(percent, colors, usageValueMode, stale);
   const reset = formatResetTime(resetAt, timeFormat);
   const styledLabel = label(windowLabel, colors);
   // "resets in X" for relative/both; "resets X" for absolute (avoids "resets in at 14:30")
@@ -427,9 +450,10 @@ function formatUsageWindowPart({
     const barReset = timeFormat === 'relative'
       ? (reset ? `${reset} / ${windowLabel}` : null)
       : (reset ? (showResetLabel ? `${t(resetsKey)} ${reset}` : reset) : null);
+    const bar = stale ? dimBar(percent ?? 0, barWidth, colors) : quotaBar(percent ?? 0, barWidth, colors);
     const body = barReset
-      ? `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay} (${barReset})`
-      : `${quotaBar(percent ?? 0, barWidth, colors)} ${usageDisplay}`;
+      ? `${bar} ${usageDisplay} (${barReset})`
+      : `${bar} ${usageDisplay}`;
     return forceLabel ? `${styledLabel} ${body}` : body;
   }
 

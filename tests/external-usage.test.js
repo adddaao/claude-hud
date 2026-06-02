@@ -349,7 +349,7 @@ test('getUsageFromExternalSnapshot sanitizes balance labels before rendering', a
   }
 });
 
-test('getUsageFromExternalSnapshot ignores stale snapshots', async () => {
+test('getUsageFromExternalSnapshot marks stale snapshots instead of dropping them', async () => {
   const updatedAt = Date.UTC(2026, 3, 20, 12, 0, 0);
   const { filePath, cleanup } = await withTempFile(JSON.stringify({
     updated_at: new Date(updatedAt).toISOString(),
@@ -358,7 +358,9 @@ test('getUsageFromExternalSnapshot ignores stale snapshots', async () => {
 
   try {
     const usage = getUsageFromExternalSnapshot(makeConfig(filePath, 1000), updatedAt + 1001);
-    assert.equal(usage, null);
+    assert.ok(usage, 'stale snapshot should still be returned');
+    assert.equal(usage.stale, true);
+    assert.equal(usage.fiveHour, 42);
   } finally {
     await cleanup();
   }

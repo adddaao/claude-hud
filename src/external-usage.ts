@@ -277,9 +277,7 @@ export function getUsageFromExternalSnapshot(
     }
 
     const freshnessMs = config.display.externalUsageFreshnessMs;
-    if (now - updatedAt > freshnessMs) {
-      return null;
-    }
+    const stale = now - updatedAt > freshnessMs;
 
     const fiveHour = parseUsagePercent(parsed.five_hour?.used_percentage);
     const sevenDay = parseUsagePercent(parsed.seven_day?.used_percentage);
@@ -306,6 +304,9 @@ export function getUsageFromExternalSnapshot(
     };
     if (balanceLabel !== null) {
       usage.balanceLabel = balanceLabel;
+    }
+    if (stale) {
+      usage.stale = true;
     }
     return usage;
   } catch {
