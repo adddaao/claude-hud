@@ -63,95 +63,6 @@ export function renderSessionLine(ctx) {
     else {
         parts.push(contextValueDisplay);
     }
-    // Project path + git status
-    let projectPart = null;
-    if (display?.showProject !== false && ctx.stdin.cwd) {
-        // Split by both Unix (/) and Windows (\) separators for cross-platform support
-        const segments = ctx.stdin.cwd.split(/[/\\]/).filter(Boolean);
-        const pathLevels = ctx.config?.pathLevels ?? 1;
-        // Always join with forward slash for consistent display
-        // Handle root path (/) which results in empty segments
-        const projectPath = segments.length > 0 ? segments.slice(-pathLevels).join('/') : '/';
-        projectPart = projectColor(projectPath, colors);
-    }
-    let gitPart = '';
-    const gitConfig = ctx.config?.gitStatus;
-    const showGit = gitConfig?.enabled ?? true;
-    const branchOverflow = gitConfig?.branchOverflow ?? 'truncate';
-    if (showGit && ctx.gitStatus) {
-        const gitParts = [ctx.gitStatus.branch];
-        // Show dirty indicator
-        if ((gitConfig?.showDirty ?? true) && ctx.gitStatus.isDirty) {
-            gitParts.push('*');
-        }
-        // Show ahead/behind (with space separator for readability)
-        if (gitConfig?.showAheadBehind) {
-            if (ctx.gitStatus.ahead > 0) {
-                gitParts.push(` ↑${ctx.gitStatus.ahead}`);
-            }
-            if (ctx.gitStatus.behind > 0) {
-                gitParts.push(` ↓${ctx.gitStatus.behind}`);
-            }
-        }
-        // Show file stats in Starship-compatible format (!modified +added ✘deleted ?untracked)
-        if (gitConfig?.showFileStats && ctx.gitStatus.fileStats) {
-            const { modified, added, deleted, untracked } = ctx.gitStatus.fileStats;
-            const statParts = [];
-            if (modified > 0)
-                statParts.push(`!${modified}`);
-            if (added > 0)
-                statParts.push(`+${added}`);
-            if (deleted > 0)
-                statParts.push(`✘${deleted}`);
-            if (untracked > 0)
-                statParts.push(`?${untracked}`);
-            if (statParts.length > 0) {
-                gitParts.push(` ${statParts.join(' ')}`);
-            }
-        }
-        gitPart = `${gitColor('git:(', colors)}${gitBranchColor(gitParts.join(''), colors)}${gitColor(')', colors)}`;
-    }
-    if (projectPart && gitPart) {
-        if (branchOverflow === 'wrap') {
-            parts.push(projectPart);
-            parts.push(gitPart);
-        }
-        else {
-            parts.push(`${projectPart} ${gitPart}`);
-        }
-    }
-    else if (projectPart) {
-        parts.push(projectPart);
-    }
-    else if (gitPart) {
-        parts.push(gitPart);
-    }
-    // Session name (custom title from /rename, or auto-generated slug)
-    if (display?.showSessionName && ctx.transcript.sessionName) {
-        parts.push(label(ctx.transcript.sessionName, colors));
-    }
-    if (display?.showClaudeCodeVersion && ctx.claudeCodeVersion) {
-        parts.push(label(`CC v${ctx.claudeCodeVersion}`, colors));
-    }
-    // Config counts (respects environmentThreshold)
-    if (display?.showConfigCounts !== false) {
-        const totalCounts = ctx.claudeMdCount + ctx.rulesCount + ctx.mcpCount + ctx.hooksCount;
-        const envThreshold = display?.environmentThreshold ?? 0;
-        if (totalCounts > 0 && totalCounts >= envThreshold) {
-            if (ctx.claudeMdCount > 0) {
-                parts.push(label(`${ctx.claudeMdCount} CLAUDE.md`, colors));
-            }
-            if (ctx.rulesCount > 0) {
-                parts.push(label(`${ctx.rulesCount} ${t('label.rules')}`, colors));
-            }
-            if (ctx.mcpCount > 0) {
-                parts.push(label(`${ctx.mcpCount} MCPs`, colors));
-            }
-            if (ctx.hooksCount > 0) {
-                parts.push(label(`${ctx.hooksCount} ${t('label.hooks')}`, colors));
-            }
-        }
-    }
     // Usage limits display (shown when enabled in config, respects usageThreshold)
     if (display?.showUsage !== false && ctx.usageData && !shouldHideUsage(ctx.stdin)) {
         const usageCompact = display?.usageCompact ?? false;
@@ -260,6 +171,95 @@ export function renderSessionLine(ctx) {
             }
             else if (ctx.usageData.balanceLabel) {
                 parts.push(`${label(t('label.usage'), colors)} ${renderBalance(ctx.usageData.balanceLabel)}`);
+            }
+        }
+    }
+    // Project path + git status
+    let projectPart = null;
+    if (display?.showProject !== false && ctx.stdin.cwd) {
+        // Split by both Unix (/) and Windows (\) separators for cross-platform support
+        const segments = ctx.stdin.cwd.split(/[/\\]/).filter(Boolean);
+        const pathLevels = ctx.config?.pathLevels ?? 1;
+        // Always join with forward slash for consistent display
+        // Handle root path (/) which results in empty segments
+        const projectPath = segments.length > 0 ? segments.slice(-pathLevels).join('/') : '/';
+        projectPart = projectColor(projectPath, colors);
+    }
+    let gitPart = '';
+    const gitConfig = ctx.config?.gitStatus;
+    const showGit = gitConfig?.enabled ?? true;
+    const branchOverflow = gitConfig?.branchOverflow ?? 'truncate';
+    if (showGit && ctx.gitStatus) {
+        const gitParts = [ctx.gitStatus.branch];
+        // Show dirty indicator
+        if ((gitConfig?.showDirty ?? true) && ctx.gitStatus.isDirty) {
+            gitParts.push('*');
+        }
+        // Show ahead/behind (with space separator for readability)
+        if (gitConfig?.showAheadBehind) {
+            if (ctx.gitStatus.ahead > 0) {
+                gitParts.push(` ↑${ctx.gitStatus.ahead}`);
+            }
+            if (ctx.gitStatus.behind > 0) {
+                gitParts.push(` ↓${ctx.gitStatus.behind}`);
+            }
+        }
+        // Show file stats in Starship-compatible format (!modified +added ✘deleted ?untracked)
+        if (gitConfig?.showFileStats && ctx.gitStatus.fileStats) {
+            const { modified, added, deleted, untracked } = ctx.gitStatus.fileStats;
+            const statParts = [];
+            if (modified > 0)
+                statParts.push(`!${modified}`);
+            if (added > 0)
+                statParts.push(`+${added}`);
+            if (deleted > 0)
+                statParts.push(`✘${deleted}`);
+            if (untracked > 0)
+                statParts.push(`?${untracked}`);
+            if (statParts.length > 0) {
+                gitParts.push(` ${statParts.join(' ')}`);
+            }
+        }
+        gitPart = `${gitColor('git:(', colors)}${gitBranchColor(gitParts.join(''), colors)}${gitColor(')', colors)}`;
+    }
+    if (projectPart && gitPart) {
+        if (branchOverflow === 'wrap') {
+            parts.push(projectPart);
+            parts.push(gitPart);
+        }
+        else {
+            parts.push(`${projectPart} ${gitPart}`);
+        }
+    }
+    else if (projectPart) {
+        parts.push(projectPart);
+    }
+    else if (gitPart) {
+        parts.push(gitPart);
+    }
+    // Session name (custom title from /rename, or auto-generated slug)
+    if (display?.showSessionName && ctx.transcript.sessionName) {
+        parts.push(label(ctx.transcript.sessionName, colors));
+    }
+    if (display?.showClaudeCodeVersion && ctx.claudeCodeVersion) {
+        parts.push(label(`CC v${ctx.claudeCodeVersion}`, colors));
+    }
+    // Config counts (respects environmentThreshold)
+    if (display?.showConfigCounts !== false) {
+        const totalCounts = ctx.claudeMdCount + ctx.rulesCount + ctx.mcpCount + ctx.hooksCount;
+        const envThreshold = display?.environmentThreshold ?? 0;
+        if (totalCounts > 0 && totalCounts >= envThreshold) {
+            if (ctx.claudeMdCount > 0) {
+                parts.push(label(`${ctx.claudeMdCount} CLAUDE.md`, colors));
+            }
+            if (ctx.rulesCount > 0) {
+                parts.push(label(`${ctx.rulesCount} ${t('label.rules')}`, colors));
+            }
+            if (ctx.mcpCount > 0) {
+                parts.push(label(`${ctx.mcpCount} MCPs`, colors));
+            }
+            if (ctx.hooksCount > 0) {
+                parts.push(label(`${ctx.hooksCount} ${t('label.hooks')}`, colors));
             }
         }
     }
