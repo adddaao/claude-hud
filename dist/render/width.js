@@ -2,11 +2,35 @@ import { isCjkLanguage } from '../i18n/index.js';
 // CJK terminals render East Asian Ambiguous-width chars (box drawing,
 // block elements, arrows, etc.) as 2 cells. The HUD bar/separator/icon
 // glyphs fall in those ranges, so width math must follow suit when the
-// user's language is CJK — otherwise wrap calculations under-report
+// terminal is in a CJK locale — otherwise wrap calculations under-report
 // visual width and the terminal itself wraps.
 // https://www.unicode.org/reports/tr11/
+// Cache the result so we don't re-detect on every call.
+let _cachedCjkAmbiguousWide = null;
+function detectCjkTerminal() {
+    // 1. HUD language explicitly set to CJK
+    if (isCjkLanguage())
+        return true;
+    // 2. Detect system locale via Intl (works on all platforms,
+    //    returns e.g. 'zh-CN' on Chinese Windows regardless of env vars)
+    try {
+        const locale = Intl.DateTimeFormat().resolvedOptions().locale || '';
+        if (/^zh|^ja|^ko/i.test(locale))
+            return true;
+    }
+    catch { }
+    // 3. Check LANG / LC_* environment variables (Git Bash on Windows, Linux, macOS)
+    const envLang = [process.env.LC_ALL, process.env.LC_CTYPE, process.env.LANG]
+        .find(v => v && v.length > 0);
+    if (envLang && /zh|ja|ko/i.test(envLang))
+        return true;
+    return false;
+}
 export function isCjkAmbiguousWide() {
-    return isCjkLanguage();
+    if (_cachedCjkAmbiguousWide === null) {
+        _cachedCjkAmbiguousWide = detectCjkTerminal();
+    }
+    return _cachedCjkAmbiguousWide;
 }
 export function isWideCodePoint(codePoint) {
     return codePoint >= 0x1100 && (codePoint <= 0x115F || // Hangul Jamo
