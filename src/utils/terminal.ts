@@ -1,11 +1,6 @@
-import { execSync } from 'node:child_process';
+import termSize from 'term-size';
 
 export const UNKNOWN_TERMINAL_WIDTH = null;
-
-// Cache mode.com result for 5 seconds to avoid spawning a process on every render.
-let cachedModeCols: number | null | undefined;
-let cachedModeExpiresAt = 0;
-const MODE_CACHE_TTL_MS = 5_000;
 
 function parseEnvColumns(): number | null {
   const envColumns = Number.parseInt(process.env.COLUMNS ?? '', 10);
@@ -18,67 +13,13 @@ function parseStreamColumns(columns: unknown): number | null {
     : null;
 }
 
-function detectViaTput(): number | null {
+function detectViaTermSize(): number | null {
   try {
-    const result = execSync('tput cols 2>/dev/null', {
-      encoding: 'utf8',
-      timeout: 500,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const cols = parseInt(result.trim(), 10);
-    if (cols > 0) return cols;
+    const size = termSize();
+    return size.columns > 0 ? size.columns : null;
   } catch {
-    // tput not available
+    return null;
   }
-  return null;
-}
-
-function detectViaStty(): number | null {
-  try {
-    const result = execSync('stty size </dev/tty 2>/dev/null', {
-      encoding: 'utf8',
-      timeout: 500,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const parts = result.trim().split(/\s+/);
-    if (parts.length >= 2) {
-      const cols = parseInt(parts[1], 10);
-      if (cols > 0) return cols;
-    }
-  } catch {
-    // stty or /dev/tty not available
-  }
-  return null;
-}
-
-function detectViaModeUncached(): number | null {
-  if (process.platform !== 'win32') return null;
-  try {
-    const result = execSync('mode.com con', {
-      encoding: 'utf8',
-      timeout: 500,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    const match = result.match(/Columns:\s+(\d+)/i);
-    if (match) {
-      const cols = parseInt(match[1], 10);
-      if (cols > 0) return cols;
-    }
-  } catch {
-    // mode.com not available or no console
-  }
-  return null;
-}
-
-function detectViaMode(): number | null {
-  const now = Date.now();
-  if (cachedModeCols !== undefined && now < cachedModeExpiresAt) {
-    return cachedModeCols;
-  }
-  cachedModeCols = detectViaModeUncached();
-  cachedModeExpiresAt = now + MODE_CACHE_TTL_MS;
-  return cachedModeCols;
 }
 
 export function getTerminalWidth(options: { preferEnv?: boolean; fallback?: number | null } = {}): number | null {
@@ -87,26 +28,18 @@ export function getTerminalWidth(options: { preferEnv?: boolean; fallback?: numb
   const streamCols = parseStreamColumns(process.stdout?.columns)
     ?? parseStreamColumns(process.stderr?.columns);
   const envCols = parseEnvColumns();
-
-  // On Windows, try mode.com detection early — it's more reliable than
-  // env/stream columns when running as a headless subprocess. Result is cached
-  // to avoid spawning mode.com on every render call.
-  const modeCols = process.platform === 'win32' ? detectViaMode() : null;
+  const termSizeCols = detectViaTermSize();
 
   if (preferEnv) {
     return envCols
       ?? streamCols
-      ?? modeCols
-      ?? detectViaTput()
-      ?? detectViaStty()
+      ?? termSizeCols
       ?? fallback;
   }
 
   return streamCols
     ?? envCols
-    ?? modeCols
-    ?? detectViaTput()
-    ?? detectViaStty()
+    ?? termSizeCols
     ?? fallback;
 }
 
