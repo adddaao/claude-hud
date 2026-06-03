@@ -41,6 +41,14 @@ const MODEL_PRICING: Array<{ pattern: RegExp; pricing: ModelPricing }> = [
   // DeepSeek models (v4-pro before general to avoid under-pricing)
   { pattern: /\bdeepseek[\s.]*v\s*4[\s.]*pro\b/i, pricing: { inputUsdPerMillion: 1.74, outputUsdPerMillion: 3.48 } },
   { pattern: /\bdeepseek\b/i, pricing: { inputUsdPerMillion: 0.14, outputUsdPerMillion: 0.28 } },
+  // GLM / Zhipu models
+  { pattern: /\bglm[\s-]*4[\s-]*plus\b/i, pricing: { inputUsdPerMillion: 7.14, outputUsdPerMillion: 7.14 } },
+  { pattern: /\bglm[\s-]*4[\s-]*alltools\b/i, pricing: { inputUsdPerMillion: 7.14, outputUsdPerMillion: 7.14 } },
+  { pattern: /\bglm[\s-]*4[\s-]*long\b/i, pricing: { inputUsdPerMillion: 0.14, outputUsdPerMillion: 0.14 } },
+  { pattern: /\bglm[\s-]*4[\s-]*flash\b/i, pricing: { inputUsdPerMillion: 0.1, outputUsdPerMillion: 0.1 } },
+  { pattern: /\bglm[\s-]*4[\s-]*air\b/i, pricing: { inputUsdPerMillion: 0.14, outputUsdPerMillion: 0.14 } },
+  { pattern: /\bglm[\s-]*4\b/i, pricing: { inputUsdPerMillion: 14.3, outputUsdPerMillion: 14.3 } },
+  { pattern: /\bchatglm\b/i, pricing: { inputUsdPerMillion: 0.14, outputUsdPerMillion: 0.14 } },
 ];
 
 function normalizeModelName(modelName: string): string {

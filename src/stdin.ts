@@ -226,6 +226,23 @@ export function getModelName(stdin: StdinData): string {
     return enterpriseLabel;
   }
 
+  // Proxy/relay model IDs with vendor prefix (e.g. Pro/zai-org/GLM-4.7, deepseek/deepseek-chat)
+  // Must be checked before specific provider IDs to handle slash-separated formats
+  const proxyLabel = normalizeProxyModelLabel(modelId);
+  if (proxyLabel) {
+    return proxyLabel;
+  }
+
+  // DeepSeek model IDs (e.g. deepseek-chat, deepseek-coder, deepseek-reasoner)
+  if (isDeepSeekModelId(modelId)) {
+    return normalizeDeepSeekLabel(modelId);
+  }
+
+  // GLM / Zhipu model IDs (e.g. glm-4-plus, glm-4-air, chatglm3-turbo)
+  if (isGlmModelId(modelId)) {
+    return normalizeGlmLabel(modelId);
+  }
+
   const normalizedBedrockLabel = normalizeBedrockModelLabel(modelId);
   return normalizedBedrockLabel ?? modelId;
 }
@@ -255,6 +272,38 @@ export function isEnterpriseModelId(modelId?: string): boolean {
   return ENTERPRISE_MODEL_IDS.has(modelId.toLowerCase());
 }
 
+export function isDeepSeekModelId(modelId?: string): boolean {
+  if (!modelId) {
+    return false;
+  }
+  return /^deepseek/i.test(modelId);
+}
+
+export function isGlmModelId(modelId?: string): boolean {
+  if (!modelId) {
+    return false;
+  }
+  return /^(glm|chatglm)/i.test(modelId);
+}
+
+function detectProviderFromBaseUrl(): string | null {
+  const baseUrl = process.env.ANTHROPIC_BASE_URL;
+  if (!baseUrl) return null;
+  let host: string;
+  try {
+    host = new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (!host) return null;
+  if (host === 'api.deepseek.com' || host.endsWith('.deepseek.com')) return 'DeepSeek';
+  if (host === 'api.z.ai' || host.endsWith('.z.ai')) return 'Zhipu';
+  if (host === 'open.bigmodel.cn' || host.endsWith('.bigmodel.cn')) return 'Zhipu';
+  if (host === 'api.siliconflow.cn' || host.endsWith('.siliconflow.cn')) return 'SiliconFlow';
+  if (host === 'openrouter.ai' || host.endsWith('.openrouter.ai')) return 'OpenRouter';
+  return null;
+}
+
 export function getProviderLabel(stdin: StdinData): string | null {
   if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
     return 'Bedrock';
@@ -265,11 +314,31 @@ export function getProviderLabel(stdin: StdinData): string | null {
   if (isEnterpriseModelId(stdin.model?.id)) {
     return 'Enterprise';
   }
+  // Unified mode: ANTHROPIC_BASE_URL hostname → provider
+  const urlProvider = detectProviderFromBaseUrl();
+  if (urlProvider) {
+    return urlProvider;
+  }
+  // cc-switch standalone mode: dedicated API keys without ANTHROPIC_BASE_URL
+  if (process.env.DEEPSEEK_API_KEY) {
+    return 'DeepSeek';
+  }
+  if (process.env.ZHIPU_API_KEY) {
+    return 'Zhipu';
+  }
+  // Fallback: model ID prefix
+  if (isDeepSeekModelId(stdin.model?.id)) {
+    return 'DeepSeek';
+  }
+  if (isGlmModelId(stdin.model?.id)) {
+    return 'Zhipu';
+  }
   return null;
 }
 
 export function shouldHideUsage(stdin: StdinData): boolean {
-  return getProviderLabel(stdin) === 'Bedrock' || isBedrockModelId(stdin.model?.id);
+  const provider = getProviderLabel(stdin);
+  return provider === 'Bedrock' || isBedrockModelId(stdin.model?.id);
 }
 
 function parseRateLimitPercent(value: number | null | undefined): number | null {
@@ -345,6 +414,91 @@ export function formatModelName(name: string, format?: ModelFormatMode, override
   }
 
   return result;
+}
+
+function normalizeDeepSeekLabel(modelId: string): string {
+  const id = modelId.toLowerCase();
+  // deepseek-v3-0324, deepseek-v3 etc.
+  if (/^deepseek-v\s*(\d+)/i.test(id) || /^deepseek\s+v\s*(\d+)/i.test(id)) {
+    const match = id.match(/v\s*(\d+)/);
+    const version = match ? match[1] : '';
+    return version ? `DeepSeek V${version}` : 'DeepSeek';
+  }
+  // deepseek-r1-0528, deepseek-r1 etc.
+  if (/^deepseek-r\s*(\d+)/i.test(id) || /^deepseek\s+r\s*(\d+)/i.test(id)) {
+    const match = id.match(/r\s*(\d+)/);
+    const version = match ? match[1] : '';
+    return version ? `DeepSeek R${version}` : 'DeepSeek R1';
+  }
+  // deepseek-reasoner
+  if (id.includes('reasoner')) {
+    return 'DeepSeek R1';
+  }
+  // deepseek-chat
+  if (id === 'deepseek-chat') {
+    return 'DeepSeek V3';
+  }
+  // deepseek-coder
+  if (id === 'deepseek-coder') {
+    return 'DeepSeek Coder';
+  }
+  // Fallback: capitalize first letter of each segment
+  return modelId.split(/[-_\s]+/).map((s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()).join(' ');
+}
+
+function normalizeGlmLabel(modelId: string): string {
+  const id = modelId.toLowerCase();
+
+  // glm-5.1, glm-4-plus, glm-4-air, glm-4-flash, glm-4-long, glm-4-alltools, glm-3-turbo
+  const glmMatch = id.match(/^glm-?(\d+(?:\.\d+)*)[-]?([\w]*)/);
+  if (glmMatch) {
+    const version = glmMatch[1];
+    const variant = glmMatch[2];
+    if (!variant) return `GLM-${version}`;
+    return `GLM-${version} ${variant.charAt(0).toUpperCase() + variant.slice(1)}`;
+  }
+
+  // chatglm3-turbo, chatglm2-6b etc.
+  if (id.startsWith('chatglm')) {
+    const rest = id.slice(7); // after "chatglm"
+    const numMatch = rest.match(/^(\d+(?:\.\d+)*)/);
+    if (numMatch) {
+      const version = numMatch[1];
+      const variant = rest.slice(version.length).replace(/^[-_]/, '');
+      if (!variant) return `ChatGLM ${version}`;
+      return `ChatGLM ${version} ${variant.charAt(0).toUpperCase() + variant.slice(1)}`;
+    }
+    return 'ChatGLM';
+  }
+  return modelId.split(/[-_\s]+/).map((s) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()).join(' ');
+}
+
+/**
+ * Normalize proxy/relay model IDs with vendor prefixes.
+ * Examples: Pro/zai-org/GLM-4.7 → GLM-4.7, deepseek/deepseek-chat → DeepSeek V3
+ */
+function normalizeProxyModelLabel(modelId: string): string | null {
+  // Match patterns like "Vendor/Org/Model" or "vendor/model"
+  const slashMatch = modelId.match(/^(?:[\w.-]+\/)+([\w.-]+)$/);
+  if (!slashMatch) return null;
+
+  const lastSegment = slashMatch[1];
+
+  // Check if the last segment (or full ID) contains a known model family
+  const fullLower = modelId.toLowerCase();
+
+  if (/\bglm\b/i.test(lastSegment) || /\bchatglm\b/i.test(lastSegment)) {
+    return normalizeGlmLabel(lastSegment);
+  }
+  if (/deepseek/i.test(lastSegment) || /deepseek/i.test(fullLower)) {
+    return normalizeDeepSeekLabel(lastSegment);
+  }
+  if (/^claude/i.test(lastSegment)) {
+    return lastSegment;
+  }
+
+  // Generic: return the last segment cleaned up
+  return lastSegment.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function normalizeBedrockModelLabel(modelId: string): string | null {

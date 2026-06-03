@@ -113,65 +113,28 @@ If empty, the plugin is not installed. Ask user to run `/plugin install claude-h
 
 ### Step 3: Copy fetch script
 
-**macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SCRIPT_DEST="$CLAUDE_DIR/plugins/claude-hud"
 mkdir -p "$SCRIPT_DEST"
 
-FETCH_SCRIPT="$PLUGIN_DIR/scripts/fetch-usage.sh"
-if [ -n "$FETCH_SCRIPT" ] && [ -f "$FETCH_SCRIPT" ]; then
-  cp "$FETCH_SCRIPT" "$SCRIPT_DEST/fetch-usage.sh"
-  chmod +x "$SCRIPT_DEST/fetch-usage.sh"
-  echo "OK: fetch script installed"
-else
-  echo "ERROR: fetch-usage.sh not found in plugin"
-  exit 1
-fi
-
 FETCH_JS="$PLUGIN_DIR/scripts/fetch-usage.js"
 if [ -f "$FETCH_JS" ]; then
   cp "$FETCH_JS" "$SCRIPT_DEST/fetch-usage.js"
-  echo "OK: fetch JS script installed"
-fi
-```
-
-**Windows (PowerShell)**:
-```powershell
-$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
-$scriptDest = Join-Path $claudeDir "plugins\claude-hud"
-New-Item -ItemType Directory -Force -Path $scriptDest | Out-Null
-
-$fetchJs = if ($pluginDir) { Join-Path $pluginDir "scripts\fetch-usage.js" } else { $null }
-if ($fetchJs -and (Test-Path $fetchJs)) {
-  Copy-Item $fetchJs (Join-Path $scriptDest "fetch-usage.js") -Force
-  Write-Host "OK: fetch script installed"
-} else {
-  Write-Host "ERROR: fetch-usage.js not found in plugin"
+  echo "OK: fetch script installed"
+else
+  echo "ERROR: fetch-usage.js not found in plugin"
   exit 1
-}
+fi
 ```
 
 ### Step 4: Test API connection
 
-**macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-ANTHROPIC_API_KEY="$API_KEY" ANTHROPIC_BASE_URL="$BASE_URL" "$CLAUDE_DIR/plugins/claude-hud/fetch-usage.sh"
+ANTHROPIC_API_KEY="$API_KEY" ANTHROPIC_BASE_URL="$BASE_URL" node "$CLAUDE_DIR/plugins/claude-hud/fetch-usage.js"
 echo "Exit code: $?"
 cat "$CLAUDE_DIR/plugins/claude-hud/usage-snapshot.json" 2>/dev/null || echo "No snapshot written"
-```
-
-**Windows (PowerShell)**:
-```powershell
-$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
-$scriptPath = Join-Path $claudeDir "plugins\claude-hud\fetch-usage.js"
-$env:ANTHROPIC_API_KEY = $apiKey
-$env:ANTHROPIC_BASE_URL = $baseUrl
-node $scriptPath 2>$null
-if ($LASTEXITCODE -eq 0) { Write-Host "OK: API connected" } else { Write-Host "WARN: API test failed" }
-$snapshot = Join-Path $claudeDir "plugins\claude-hud\usage-snapshot.json"
-if (Test-Path $snapshot) { Get-Content $snapshot } else { Write-Host "No snapshot written" }
 ```
 
 If exit code is 0 and snapshot file exists, API works. If not, the API key may be wrong — ask user to verify.
@@ -203,27 +166,6 @@ Read `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json`.
 
 Add or update the PreToolUse hook — merge with existing hooks, do not replace:
 
-**macOS/Linux** — use the `.sh` script:
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash|Read|Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/fetch-usage.sh",
-            "async": true
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-**Windows** — use the `.js` script via `node`:
 ```json
 {
   "hooks": {
@@ -243,7 +185,7 @@ Add or update the PreToolUse hook — merge with existing hooks, do not replace:
 }
 ```
 
-If a PreToolUse entry with matcher `Bash|Read|Write|Edit` already exists, append the fetch-usage hook to its `hooks` array if not already present. Remove any old `fetch-zhipu-usage.sh` or `fetch-deepseek-usage.sh` hooks from the same array.
+If a PreToolUse entry with matcher `Bash|Read|Write|Edit` already exists, append the fetch-usage hook to its `hooks` array if not already present. Remove any old `fetch-zhipu-usage.sh`, `fetch-deepseek-usage.sh`, or `fetch-usage.sh` hooks from the same array.
 
 ### Step 7: Confirm
 

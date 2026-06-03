@@ -718,69 +718,27 @@ Unified mode (ANTHROPIC_API_KEY + hostname match on ANTHROPIC_BASE_URL) takes pr
 
 **4.5a: Copy unified fetch script**
 
-**macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 PLUGIN_DIR=$(ls -d "$CLAUDE_DIR"/plugins/cache/*/claude-hud/*/ 2>/dev/null | sort -V | tail -1)
 SCRIPT_DEST="$CLAUDE_DIR/plugins/claude-hud"
 mkdir -p "$SCRIPT_DEST"
 
-FETCH_SCRIPT="$PLUGIN_DIR/scripts/fetch-usage.sh"
-if [ -f "$FETCH_SCRIPT" ]; then
-  cp "$FETCH_SCRIPT" "$SCRIPT_DEST/fetch-usage.sh"
-  chmod +x "$SCRIPT_DEST/fetch-usage.sh"
+FETCH_JS="$PLUGIN_DIR/scripts/fetch-usage.js"
+if [ -f "$FETCH_JS" ]; then
+  cp "$FETCH_JS" "$SCRIPT_DEST/fetch-usage.js"
   echo "OK: fetch script installed"
 else
   echo "WARN: fetch script not found in plugin, skipping"
 fi
-
-FETCH_JS="$PLUGIN_DIR/scripts/fetch-usage.js"
-if [ -f "$FETCH_JS" ]; then
-  cp "$FETCH_JS" "$SCRIPT_DEST/fetch-usage.js"
-  echo "OK: fetch JS script installed"
-fi
-```
-
-**Windows (PowerShell)**:
-```powershell
-$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
-$pluginDir = (Get-ChildItem (Join-Path $claudeDir "plugins\cache\*\claude-hud\*") -Directory -ErrorAction SilentlyContinue |
-    Where-Object { $_.Name -match '^\d+(\.\d+)+$' } |
-    Sort-Object { [version]$_.Name } -Descending |
-    Select-Object -First 1).FullName
-$scriptDest = Join-Path $claudeDir "plugins\claude-hud"
-New-Item -ItemType Directory -Force -Path $scriptDest | Out-Null
-
-$fetchJs = if ($pluginDir) { Join-Path $pluginDir "scripts\fetch-usage.js" } else { $null }
-if ($fetchJs -and (Test-Path $fetchJs)) {
-  Copy-Item $fetchJs (Join-Path $scriptDest "fetch-usage.js") -Force
-  Write-Host "OK: fetch script installed"
-} else {
-  Write-Host "WARN: fetch script not found in plugin, skipping"
-}
 ```
 
 **4.5b: Test API connection**
 
-**macOS/Linux**:
 ```bash
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-ANTHROPIC_API_KEY="$API_KEY" ANTHROPIC_BASE_URL="$BASE_URL" "$CLAUDE_DIR/plugins/claude-hud/fetch-usage.sh" 2>/dev/null && echo "OK: API connected" || echo "WARN: API test failed"
+ANTHROPIC_API_KEY="$API_KEY" ANTHROPIC_BASE_URL="$BASE_URL" node "$CLAUDE_DIR/plugins/claude-hud/fetch-usage.js" 2>/dev/null && echo "OK: API connected" || echo "WARN: API test failed"
 cat "$CLAUDE_DIR/plugins/claude-hud/usage-snapshot.json" 2>/dev/null
-```
-
-**Windows (PowerShell)**:
-```powershell
-$claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
-$scriptPath = Join-Path $claudeDir "plugins\claude-hud\fetch-usage.js"
-if (Test-Path $scriptPath) {
-  $env:ANTHROPIC_API_KEY = $apiKey
-  $env:ANTHROPIC_BASE_URL = $baseUrl
-  node $scriptPath 2>$null
-  if ($LASTEXITCODE -eq 0) { Write-Host "OK: API connected" } else { Write-Host "WARN: API test failed" }
-} else { Write-Host "WARN: no fetch script found" }
-$snapshot = Join-Path $claudeDir "plugins\claude-hud\usage-snapshot.json"
-if (Test-Path $snapshot) { Get-Content $snapshot } else { Write-Host "No snapshot written" }
 ```
 
 If the test fails (no snapshot written, or exit code non-zero), **do NOT proceed to 4.5c/4.5d**. The detection likely matched a URL that isn't actually that provider, or the API key doesn't match. Tell the user:
@@ -814,25 +772,8 @@ Add to the existing settings:
 
 1. Add `ANTHROPIC_API_KEY` to `env` if not already there (same value as the detected key).
 
-2. Add the fetch hook to `hooks.PreToolUse`. If a PreToolUse entry with matcher `Bash|Read|Write|Edit` already exists, append the hook to its `hooks` array if not already present. Remove any old `fetch-zhipu-usage.sh` or `fetch-deepseek-usage.sh` hooks. Otherwise add the full entry.
+2. Add the fetch hook to `hooks.PreToolUse`. If a PreToolUse entry with matcher `Bash|Read|Write|Edit` already exists, append the hook to its `hooks` array if not already present. Remove any old `fetch-zhipu-usage.sh`, `fetch-deepseek-usage.sh`, or `fetch-usage.sh` hooks. Otherwise add the full entry.
 
-**macOS/Linux** — use the `.sh` script:
-```json
-{
-  "hooks": {
-    "PreToolUse": [{
-      "matcher": "Bash|Read|Write|Edit",
-      "hooks": [{
-        "type": "command",
-        "command": "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/fetch-usage.sh",
-        "async": true
-      }]
-    }]
-  }
-}
-```
-
-**Windows** — use the `.js` script via `node`:
 ```json
 {
   "hooks": {
@@ -847,8 +788,6 @@ Add to the existing settings:
   }
 }
 ```
-
-**Note**: On macOS/Linux, the `.js` hook form (`node .../fetch-usage.js`) also works. The `.sh` form is preferred for backward compatibility. On Windows, only the `.js` form works.
 
 After completing these sub-steps, tell the user based on the detected provider:
 

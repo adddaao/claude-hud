@@ -45,7 +45,7 @@ Claude HUD 支持在非 Anthropic 官方模型（如 ZhipuAI、DeepSeek）下显
 
 1. **检测提供商** — 读 `ANTHROPIC_BASE_URL` 判断是 ZhipuAI 还是 DeepSeek
 2. **验证 API Key** — 没配就提示，配了就测试连接
-3. **安装 fetch 脚本** — 复制 `fetch-usage.sh` 到插件目录
+3. **安装 fetch 脚本** — 复制 `fetch-usage.js` 到插件目录
 4. **写配置** — 更新 `config.json` 的 `externalUsagePath` 指向 snapshot 文件
 5. **注册 Hook** — 在 `settings.json` 添加 `PreToolUse` hook，每次工具调用时异步刷新数据
 

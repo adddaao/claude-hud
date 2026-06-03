@@ -1,4 +1,5 @@
 import { readStdin, getUsageFromStdin } from "./stdin.js";
+import type { StdinData } from "./types.js";
 import { parseTranscript } from "./transcript.js";
 import { render } from "./render/index.js";
 import { countConfigs } from "./config-reader.js";
@@ -20,7 +21,7 @@ import { realpathSync } from "node:fs";
 export type MainDeps = {
   readStdin: typeof readStdin;
   getUsageFromStdin: typeof getUsageFromStdin;
-  getUsageFromExternalSnapshot: typeof getUsageFromExternalSnapshot;
+  getUsageFromExternalSnapshot: (config: import("./config.js").HudConfig, now: number, stdin?: StdinData) => import("./types.js").UsageData | null;
   writeExternalUsageSnapshot: typeof writeExternalUsageSnapshot;
   parseTranscript: typeof parseTranscript;
   countConfigs: typeof countConfigs;
@@ -103,7 +104,7 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
     if (shouldReadUsage) {
       usageData = stdinUsage;
       if (!usageData) {
-        usageData = deps.getUsageFromExternalSnapshot(config, deps.now());
+        usageData = deps.getUsageFromExternalSnapshot(config, deps.now(), stdin);
       }
     }
 

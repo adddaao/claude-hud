@@ -1,4 +1,5 @@
 import { readStdin, getUsageFromStdin } from "./stdin.js";
+import type { StdinData } from "./types.js";
 import { parseTranscript } from "./transcript.js";
 import { render } from "./render/index.js";
 import { countConfigs } from "./config-reader.js";
@@ -8,12 +9,12 @@ import { parseExtraCmdArg, runExtraCmd } from "./extra-cmd.js";
 import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { applyContextWindowFallback } from "./context-cache.js";
-import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
+import { writeExternalUsageSnapshot } from "./external-usage.js";
 export { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
 export type MainDeps = {
     readStdin: typeof readStdin;
     getUsageFromStdin: typeof getUsageFromStdin;
-    getUsageFromExternalSnapshot: typeof getUsageFromExternalSnapshot;
+    getUsageFromExternalSnapshot: (config: import("./config.js").HudConfig, now: number, stdin?: StdinData) => import("./types.js").UsageData | null;
     writeExternalUsageSnapshot: typeof writeExternalUsageSnapshot;
     parseTranscript: typeof parseTranscript;
     countConfigs: typeof countConfigs;

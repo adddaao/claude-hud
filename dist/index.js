@@ -71,7 +71,7 @@ export async function main(overrides = {}) {
         if (shouldReadUsage) {
             usageData = stdinUsage;
             if (!usageData) {
-                usageData = deps.getUsageFromExternalSnapshot(config, deps.now());
+                usageData = deps.getUsageFromExternalSnapshot(config, deps.now(), stdin);
             }
         }
         const extraCmd = deps.parseExtraCmdArg();

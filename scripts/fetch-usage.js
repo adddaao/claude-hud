@@ -45,6 +45,15 @@ function emptySnapshot() {
   return { five_hour: null, seven_day: null, updated_at: new Date().toISOString(), balance_label: null };
 }
 
+async function withRetry(fn, retries = 1, delayMs = 3000) {
+  for (let i = 0; i <= retries; i++) {
+    try { return await fn(); } catch (e) {
+      if (i === retries) throw e;
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+}
+
 async function fetchDeepSeek(apiKey, snapshotFile) {
   const url = process.env.DEEPSEEK_API_URL || 'https://api.deepseek.com/user/balance';
   const body = await httpGet(url, { Authorization: `Bearer ${apiKey}` });
@@ -148,11 +157,11 @@ async function main() {
   if (anthropicKey) {
     const provider = detectProviderFromBaseUrl(process.env.ANTHROPIC_BASE_URL);
     if (provider === 'deepseek') {
-      await fetchDeepSeek(anthropicKey, 'usage-snapshot.json');
+      await withRetry(() => fetchDeepSeek(anthropicKey, 'usage-snapshot.json'));
       return;
     }
     if (provider === 'zhipu') {
-      await fetchZhipu(anthropicKey, 'usage-snapshot.json');
+      await withRetry(() => fetchZhipu(anthropicKey, 'usage-snapshot.json'));
       return;
     }
   }
@@ -161,11 +170,11 @@ async function main() {
     process.stderr.write('[claude-hud] Both DEEPSEEK_API_KEY and ZHIPU_API_KEY are set; using DeepSeek. Unset one to resolve the ambiguity.\n');
   }
   if (deepseekKey) {
-    await fetchDeepSeek(deepseekKey, 'deepseek-snapshot.json');
+    await withRetry(() => fetchDeepSeek(deepseekKey, 'deepseek-snapshot.json'));
     return;
   }
   if (zhipuKey) {
-    await fetchZhipu(zhipuKey, 'usage-snapshot.json');
+    await withRetry(() => fetchZhipu(zhipuKey, 'usage-snapshot.json'));
     return;
   }
 }

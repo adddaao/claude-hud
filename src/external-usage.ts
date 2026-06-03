@@ -1,7 +1,10 @@
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import type { HudConfig } from './config.js';
 import type { ExternalUsageSnapshot, UsageData } from './types.js';
+import { getHudPluginDir } from './claude-config-dir.js';
+import { getProviderLabel } from './stdin.js';
 
 const MAX_BALANCE_LABEL_LENGTH = 50;
 export const EXTERNAL_USAGE_WRITE_THROTTLE_MS = 30_000;
@@ -259,11 +262,66 @@ export function writeExternalUsageSnapshot(
   }
 }
 
+/**
+ * Auto-resolve snapshot path for non-Anthropic providers.
+ * Tries default locations written by fetch-usage scripts for DeepSeek/Zhipu.
+ *
+ * Snapshot file naming follows fetch-usage behavior:
+ *   - Unified mode (ANTHROPIC_API_KEY + ANTHROPIC_BASE_URL) → usage-snapshot.json
+ *   - Standalone DeepSeek (DEEPSEEK_API_KEY only)          → deepseek-snapshot.json
+ *   - Standalone Zhipu (ZHIPU_API_KEY only)                → usage-snapshot.json
+ */
+function resolveAutoSnapshotPath(stdin?: import('./types.js').StdinData): string | null {
+  const provider = stdin ? getProviderLabel(stdin) : null;
+  if (!provider || provider === 'Bedrock' || provider === 'Vertex' || provider === 'Enterprise') {
+    return null;
+  }
+
+  const snapshotDir = getHudPluginDir(os.homedir());
+  const hasUnifiedKey = Boolean(process.env.ANTHROPIC_API_KEY);
+
+  // In standalone DeepSeek mode, fetch-usage writes to deepseek-snapshot.json
+  // so it must be tried first. Otherwise usage-snapshot.json is the canonical name.
+  const candidates = (!hasUnifiedKey && provider === 'DeepSeek')
+    ? [
+        path.join(snapshotDir, 'deepseek-snapshot.json'),
+        path.join(snapshotDir, 'usage-snapshot.json'),
+      ]
+    : [
+        path.join(snapshotDir, 'usage-snapshot.json'),
+        path.join(snapshotDir, 'deepseek-snapshot.json'),
+      ];
+
+  for (const candidate of candidates) {
+    try {
+      if (fs.statSync(candidate).isFile()) {
+        return candidate;
+      }
+    } catch {
+      // File doesn't exist, try next
+    }
+  }
+  return null;
+}
+
 export function getUsageFromExternalSnapshot(
   config: HudConfig,
   now = Date.now(),
+  stdin?: import('./types.js').StdinData,
 ): UsageData | null {
-  const snapshotPath = config.display.externalUsagePath;
+  // For non-Anthropic providers (cc-switch), prefer auto-resolved snapshot
+  // over a possibly stale configured path (e.g. user switched from Anthropic
+  // to DeepSeek standalone mode — fetch-usage now writes a different file).
+  const provider = stdin ? getProviderLabel(stdin) : null;
+  const isThirdParty = provider != null && provider !== 'Bedrock' && provider !== 'Vertex' && provider !== 'Enterprise';
+
+  let snapshotPath = '';
+  if (isThirdParty) {
+    snapshotPath = resolveAutoSnapshotPath(stdin) ?? config.display.externalUsagePath;
+  } else {
+    snapshotPath = config.display.externalUsagePath;
+  }
+
   if (!snapshotPath) {
     return null;
   }
