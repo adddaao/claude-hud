@@ -32,10 +32,10 @@ export function renderUsageLine(
   }
 
   const stale = ctx.usageData.stale === true;
-  const usageLabel = progressLabel("label.usage", colors, alignLabels);
-  const renderBalance = (text: string) => stale ? label(text, colors) : text;
-
   const hasUsageData = ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null;
+  const usageLabel = progressLabel(hasUsageData ? "label.usage" : "label.balance", colors, alignLabels);
+  const renderBalance = (text: string) => stale ? label(text, colors) : `${getQuotaColor(0, colors)}${text}${RESET}`;
+
   if (!hasUsageData && ctx.usageData.balanceLabel) {
     return `${usageLabel} ${renderBalance(ctx.usageData.balanceLabel)}`;
   }
