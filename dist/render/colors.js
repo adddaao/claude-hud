@@ -108,6 +108,18 @@ export function getQuotaColor(percent, colors) {
         return resolveAnsi(colors?.usageWarning, BRIGHT_MAGENTA);
     return resolveAnsi(colors?.usage, BRIGHT_BLUE);
 }
+export function getBalanceColor(balanceText, colors) {
+    const num = parseFloat(balanceText.replace(/[^\d.]/g, ''));
+    if (isNaN(num))
+        return getQuotaColor(0, colors);
+    if (num <= 0)
+        return getQuotaColor(100, colors);
+    if (num < 1)
+        return getQuotaColor(90, colors);
+    if (num < 5)
+        return getQuotaColor(80, colors);
+    return getQuotaColor(0, colors);
+}
 export function quotaBar(percent, width = 10, colors) {
     const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
     const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;

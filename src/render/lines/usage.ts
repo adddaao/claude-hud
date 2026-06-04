@@ -2,7 +2,7 @@ import type { RenderContext } from "../../types.js";
 import { isLimitReached } from "../../types.js";
 import type { MessageKey } from "../../i18n/types.js";
 import { shouldHideUsage } from "../../stdin.js";
-import { critical, label, getQuotaColor, quotaBar, RESET, DIM } from "../colors.js";
+import { critical, label, getQuotaColor, getBalanceColor, quotaBar, RESET, DIM } from "../colors.js";
 import { getAdaptiveBarWidth } from "../../utils/terminal.js";
 import { t } from "../../i18n/index.js";
 import { progressLabel } from "./label-align.js";
@@ -34,7 +34,7 @@ export function renderUsageLine(
   const stale = ctx.usageData.stale === true;
   const hasUsageData = ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null;
   const usageLabel = progressLabel(hasUsageData ? "label.usage" : "label.balance", colors, alignLabels);
-  const renderBalance = (text: string) => stale ? label(text, colors) : `${getQuotaColor(0, colors)}${text}${RESET}`;
+  const renderBalance = (text: string) => `${getBalanceColor(text, colors)}${text}${RESET}`;
 
   if (!hasUsageData && ctx.usageData.balanceLabel) {
     return `${usageLabel} ${renderBalance(ctx.usageData.balanceLabel)}`;

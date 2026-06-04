@@ -1,23 +1,65 @@
-import termSize from 'term-size';
+import { execFileSync } from 'node:child_process';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 export const UNKNOWN_TERMINAL_WIDTH = null;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const VENDOR_DIR = path.join(__dirname, '..', 'vendor');
+function execVendorBinary(binaryPath, shell) {
+    return execFileSync(binaryPath, [], {
+        encoding: 'utf8',
+        shell,
+        stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+}
 export function getTerminalWidth() {
-    // term-size reads COLUMNS internally, which may be stale/wrong in
-    // statusline context (stty size </dev/tty can fail).  Temporarily
-    // clear it so term-size falls back to ioctl on /dev/tty, which
-    // returns the real terminal width even when stdin is piped.
-    const saved = process.env.COLUMNS;
-    delete process.env.COLUMNS;
-    try {
-        const size = termSize();
-        return size.columns > 0 ? size.columns : null;
+    const { env, stdout, stderr } = process;
+    // stdout/stderr.columns work when connected to a real terminal
+    if (stdout?.columns && stdout.rows)
+        return stdout.columns;
+    if (stderr?.columns && stderr.rows)
+        return stderr.columns;
+    // Vendor binaries call ioctl on /dev/tty — reliable even when stdin/stdout are piped
+    if (process.platform === 'win32') {
+        try {
+            const size = execVendorBinary(path.join(VENDOR_DIR, 'windows', 'term-size.exe'), false).split(/\r?\n/);
+            if (size.length === 2)
+                return parseInt(size[0], 10);
+        }
+        catch { }
     }
-    catch {
-        return null;
+    else {
+        if (process.platform === 'darwin') {
+            try {
+                const size = execVendorBinary(path.join(VENDOR_DIR, 'macos', 'term-size'), true).split(/\r?\n/);
+                if (size.length === 2)
+                    return parseInt(size[0], 10);
+            }
+            catch { }
+        }
+        // `resize -u` works even when all file descriptors are redirected (Linux)
+        try {
+            const output = execFileSync('resize', ['-u'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+            const size = output.match(/\d+/g);
+            if (size?.length === 2)
+                return parseInt(size[0], 10);
+        }
+        catch { }
+        if (env.TERM) {
+            try {
+                const cols = execFileSync('tput', ['cols'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+                if (cols)
+                    return parseInt(cols, 10);
+            }
+            catch { }
+        }
     }
-    finally {
-        if (saved !== undefined)
-            process.env.COLUMNS = saved;
+    // COLUMNS env var — unreliable in statusline context (may be stale/wrong)
+    if (env.COLUMNS) {
+        const cols = parseInt(env.COLUMNS, 10);
+        if (cols > 0)
+            return cols;
     }
+    return null;
 }
 // Returns a progress bar width scaled to the current terminal width.
 // Wide (>=100): 10, Medium (60-99): 6, Narrow (<60): 4.

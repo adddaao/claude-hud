@@ -1,18 +1,19 @@
 {
   "name": "claude-hud",
-  "version": "0.2.2",
+  "version": "0.3.1",
   "description": "Real-time statusline HUD for Claude Code",
   "type": "module",
   "main": "dist/index.js",
   "files": [
     "dist/",
+    "vendor/",
     "src/",
     "scripts/",
     "commands/",
     ".claude-plugin/"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r vendor/ dist/vendor/",
     "dev": "tsc --watch",
     "test": "npm run build && node --test",
     "test:coverage": "npm run build && c8 --reporter=text --reporter=lcov node --test",
@@ -34,7 +35,5 @@
     "c8": "^11.0.0",
     "typescript": "^6.0.3"
   },
-  "dependencies": {
-    "term-size": "^3.0.2"
-  }
+  "dependencies": {}
 }

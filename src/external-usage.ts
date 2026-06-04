@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -370,4 +371,45 @@ export function getUsageFromExternalSnapshot(
   } catch {
     return null;
   }
+}
+
+// Auto-refresh: when the snapshot is stale, spawn fetch-usage.js in the
+// background so the balance updates without waiting for a tool-call hook.
+// Throttled to at most once per REFRESH_COOLDOWN_MS via a state file.
+
+const REFRESH_COOLDOWN_MS = 60_000;
+
+let refreshScheduled = false;
+
+export function triggerRefreshIfStale(
+  config: HudConfig,
+  now = Date.now(),
+): void {
+  if (refreshScheduled) return;
+  if (!config.display.externalUsagePath && !config.display.externalUsageFreshnessMs) return;
+
+  const statePath = path.join(os.tmpdir(), 'claude-hud-last-refresh');
+  try {
+    const last = parseInt(fs.readFileSync(statePath, 'utf8'), 10);
+    if (!Number.isNaN(last) && now - last < REFRESH_COOLDOWN_MS) return;
+  } catch {}
+
+  refreshScheduled = true;
+
+  try {
+    fs.writeFileSync(statePath, String(now));
+  } catch {}
+
+  const scriptDir = getHudPluginDir(os.homedir());
+  const fetchScript = path.join(scriptDir, 'fetch-usage.js');
+  try {
+    if (fs.existsSync(fetchScript)) {
+      const child = spawn(process.execPath, [fetchScript], {
+        detached: true,
+        stdio: 'ignore',
+        env: { ...process.env },
+      });
+      child.unref();
+    }
+  } catch {}
 }

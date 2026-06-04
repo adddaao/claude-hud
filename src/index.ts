@@ -10,11 +10,11 @@ import { getClaudeCodeVersion } from "./version.js";
 import { getMemoryUsage } from "./memory.js";
 import { resolveEffortLevel } from "./effort.js";
 import { applyContextWindowFallback } from "./context-cache.js";
-import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
+import { getUsageFromExternalSnapshot, writeExternalUsageSnapshot, triggerRefreshIfStale } from "./external-usage.js";
 import { setLanguage, t } from "./i18n/index.js";
 import type { RenderContext } from "./types.js";
 
-export { getUsageFromExternalSnapshot, writeExternalUsageSnapshot } from "./external-usage.js";
+export { getUsageFromExternalSnapshot, writeExternalUsageSnapshot, triggerRefreshIfStale } from "./external-usage.js";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 
@@ -105,6 +105,9 @@ export async function main(overrides: Partial<MainDeps> = {}): Promise<void> {
       usageData = stdinUsage;
       if (!usageData) {
         usageData = deps.getUsageFromExternalSnapshot(config, deps.now(), stdin);
+        if (usageData?.stale) {
+          triggerRefreshIfStale(config, deps.now());
+        }
       }
     }
 

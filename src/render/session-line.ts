@@ -2,7 +2,7 @@ import type { RenderContext } from '../types.js';
 import { isLimitReached } from '../types.js';
 import { getContextPercent, getBufferedPercent, getModelName, formatModelName, getProviderLabel, getTotalTokens, shouldHideUsage } from '../stdin.js';
 import { getOutputSpeed } from '../speed-tracker.js';
-import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, quotaBar, custom as customColor, RESET, DIM } from './colors.js';
+import { coloredBar, critical, git as gitColor, gitBranch as gitBranchColor, label, model as modelColor, project as projectColor, getContextColor, getQuotaColor, getBalanceColor, quotaBar, custom as customColor, RESET, DIM } from './colors.js';
 import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { renderCostEstimate } from './lines/cost.js';
 import { renderPromptCacheLine } from './lines/prompt-cache.js';
@@ -77,7 +77,7 @@ export function renderSessionLine(ctx: RenderContext): string {
     const showResetLabel = display?.showResetLabel ?? true;
     const usageValueMode = display?.usageValue ?? 'percent';
     const stale = ctx.usageData.stale === true;
-    const renderBalance = (text: string) => stale ? label(text, colors) : `${getQuotaColor(0, colors)}${text}${RESET}`;
+    const renderBalance = (text: string) => `${getBalanceColor(text, colors)}${text}${RESET}`;
 
     const hasUsageData = ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null;
     const balancePrefix = ctx.usageData.balanceLabel ? `${renderBalance(ctx.usageData.balanceLabel)} ` : '';

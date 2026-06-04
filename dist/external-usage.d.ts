@@ -13,5 +13,6 @@ type FileSystemDeps = {
 };
 export declare function writeExternalUsageSnapshot(config: HudConfig, usage: UsageData | null, now?: number, deps?: FileSystemDeps): boolean;
 export declare function getUsageFromExternalSnapshot(config: HudConfig, now?: number, stdin?: import('./types.js').StdinData): UsageData | null;
+export declare function triggerRefreshIfStale(config: HudConfig, now?: number): void;
 export {};
 //# sourceMappingURL=external-usage.d.ts.map

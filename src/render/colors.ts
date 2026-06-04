@@ -139,6 +139,15 @@ export function getQuotaColor(percent: number, colors?: Partial<HudColorOverride
   return resolveAnsi(colors?.usage, BRIGHT_BLUE);
 }
 
+export function getBalanceColor(balanceText: string, colors?: Partial<HudColorOverrides>): string {
+  const num = parseFloat(balanceText.replace(/[^\d.]/g, ''));
+  if (isNaN(num)) return getQuotaColor(0, colors);
+  if (num <= 0) return getQuotaColor(100, colors);
+  if (num < 1) return getQuotaColor(90, colors);
+  if (num < 5) return getQuotaColor(80, colors);
+  return getQuotaColor(0, colors);
+}
+
 export function quotaBar(percent: number, width: number = 10, colors?: Partial<HudColorOverrides>): string {
   const safeWidth = Number.isFinite(width) ? Math.max(0, Math.round(width)) : 0;
   const safePercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
