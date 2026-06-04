@@ -109,7 +109,7 @@ function validatePathLevels(value) {
     return value === 1 || value === 2 || value === 3;
 }
 function validateLineLayout(value) {
-    return value === 'compact' || value === 'expanded';
+    return value === 'compact' || value === 'wrap' || value === 'expanded';
 }
 function validateAutocompactBuffer(value) {
     return value === 'enabled' || value === 'disabled';

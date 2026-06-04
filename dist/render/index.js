@@ -6,6 +6,9 @@ import { renderTodosLine } from './todos-line.js';
 import { renderIdentityLine, renderProjectLine, renderAddedDirsLine, renderGitFilesLine, renderEnvironmentLine, renderPromptCacheLine, renderUsageLine, renderMemoryLine, renderSessionTokensLine, renderSessionTimeLine, } from './lines/index.js';
 import { dim, RESET } from './colors.js';
 import { getTerminalWidth, UNKNOWN_TERMINAL_WIDTH } from '../utils/terminal.js';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { codePointCellWidth, isCjkAmbiguousWide } from './width.js';
 // eslint-disable-next-line no-control-regex
 const ANSI_ESCAPE_PATTERN = /^(?:\x1b\[[0-9;]*m|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\))/;
@@ -412,7 +415,7 @@ function renderExpanded(ctx, terminalWidth = null) {
 export function render(ctx) {
     const lineLayout = ctx.config?.lineLayout ?? 'expanded';
     const showSeparators = ctx.config?.showSeparators ?? false;
-    const detectedWidth = getTerminalWidth({ preferEnv: true, fallback: 120 });
+    const detectedWidth = getTerminalWidth() ?? 120;
     const configuredMaxWidth = ctx.config?.maxWidth ?? UNKNOWN_TERMINAL_WIDTH;
     const terminalWidth = ctx.config?.forceMaxWidth && configuredMaxWidth !== UNKNOWN_TERMINAL_WIDTH
         ? configuredMaxWidth
@@ -453,14 +456,42 @@ export function render(ctx) {
         lines.push(...activityLines);
     }
     const physicalLines = lines.flatMap(line => line.split('\n'));
-    // Only wrap when terminal width is real (known). When width is the
-    // UNKNOWN_TERMINAL_WIDTH fallback, wrapping would use an arbitrary value
-    // and produce incorrect line breaks.
-    const wrapWidth = terminalWidth !== UNKNOWN_TERMINAL_WIDTH ? (terminalWidth ?? 0) : 0;
+    // compact: no wrapping (single line, may overflow).
+    // wrap: wrap at ' | ' when content exceeds terminal width.
+    // expanded: wrap at terminal width.
+    const wrapWidth = lineLayout !== 'compact' && terminalWidth !== UNKNOWN_TERMINAL_WIDTH ? (terminalWidth ?? 0) : 0;
     const visibleLines = physicalLines.flatMap(line => wrapLineToWidth(line, wrapWidth));
     for (const line of visibleLines) {
         const outputLine = `${RESET}${line}`;
         console.log(outputLine);
+    }
+    // In wrap mode, pad output to the previous max line count so that ghost
+    // lines from a wider-wrapped render are cleared when the terminal widens.
+    // The stored max decays by 1 each invocation (~300ms) so it converges
+    // to the actual line count shortly after a resize stabilises.
+    if (lineLayout === 'wrap') {
+        const statePath = path.join(os.tmpdir(), 'claude-hud-maxlines');
+        let prevMax = 0;
+        try {
+            prevMax = parseInt(fs.readFileSync(statePath, 'utf8'), 10) || 0;
+        }
+        catch { }
+        if (visibleLines.length < prevMax) {
+            for (let i = visibleLines.length; i < prevMax; i++) {
+                console.log(RESET);
+            }
+            const decayed = Math.max(visibleLines.length, prevMax - 1);
+            try {
+                fs.writeFileSync(statePath, String(decayed));
+            }
+            catch { }
+        }
+        else {
+            try {
+                fs.writeFileSync(statePath, String(visibleLines.length));
+            }
+            catch { }
+        }
     }
 }
 //# sourceMappingURL=index.js.map

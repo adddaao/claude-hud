@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import { getHudPluginDir } from './claude-config-dir.js';
 import type { Language } from './i18n/types.js';
 
-export type LineLayoutType = 'compact' | 'expanded';
+export type LineLayoutType = 'compact' | 'wrap' | 'expanded';
 
 export type AutocompactBufferMode = 'enabled' | 'disabled';
 export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
@@ -241,7 +241,7 @@ function validatePathLevels(value: unknown): value is 1 | 2 | 3 {
 }
 
 function validateLineLayout(value: unknown): value is LineLayoutType {
-  return value === 'compact' || value === 'expanded';
+  return value === 'compact' || value === 'wrap' || value === 'expanded';
 }
 
 function validateAutocompactBuffer(value: unknown): value is AutocompactBufferMode {

@@ -69,11 +69,11 @@ export function renderSessionLine(ctx) {
         const showResetLabel = display?.showResetLabel ?? true;
         const usageValueMode = display?.usageValue ?? 'percent';
         const stale = ctx.usageData.stale === true;
-        const renderBalance = (text) => stale ? label(text, colors) : text;
+        const renderBalance = (text) => stale ? label(text, colors) : `${getQuotaColor(0, colors)}${text}${RESET}`;
         const hasUsageData = ctx.usageData.fiveHour !== null || ctx.usageData.sevenDay !== null;
         const balancePrefix = ctx.usageData.balanceLabel ? `${renderBalance(ctx.usageData.balanceLabel)} ` : '';
         if (!hasUsageData && ctx.usageData.balanceLabel) {
-            parts.push(`${label(t('label.usage'), colors)} ${renderBalance(ctx.usageData.balanceLabel)}`);
+            parts.push(`${label(t('label.balance'), colors)} ${renderBalance(ctx.usageData.balanceLabel)}`);
         }
         else if (isLimitReached(ctx.usageData)) {
             const resetTime = ctx.usageData.fiveHour === 100

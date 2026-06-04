@@ -1,5 +1,5 @@
 import type { Language } from './i18n/types.js';
-export type LineLayoutType = 'compact' | 'expanded';
+export type LineLayoutType = 'compact' | 'wrap' | 'expanded';
 export type AutocompactBufferMode = 'enabled' | 'disabled';
 export type ContextValueMode = 'percent' | 'tokens' | 'remaining' | 'both';
 export type UsageValueMode = 'percent' | 'remaining';
