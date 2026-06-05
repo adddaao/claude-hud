@@ -268,14 +268,14 @@ function splitWrapParts(line: string): Array<{ separator: string; segment: strin
   return parts;
 }
 
-function wrapLineToWidth(line: string, maxWidth: number): string[] {
+function wrapLineToWidth(line: string, maxWidth: number, truncate = true): string[] {
   if (maxWidth <= 0 || visualLength(line) <= maxWidth) {
     return [line];
   }
 
   const parts = splitWrapParts(line);
   if (parts.length <= 1) {
-    return [truncateToWidth(line, maxWidth)];
+    return [truncate ? truncateToWidth(line, maxWidth) : line];
   }
 
   const wrapped: string[] = [];
@@ -288,12 +288,12 @@ function wrapLineToWidth(line: string, maxWidth: number): string[] {
       continue;
     }
 
-    wrapped.push(truncateToWidth(current, maxWidth));
+    wrapped.push(truncate ? truncateToWidth(current, maxWidth) : current);
     current = part.segment;
   }
 
   if (current) {
-    wrapped.push(truncateToWidth(current, maxWidth));
+    wrapped.push(truncate ? truncateToWidth(current, maxWidth) : current);
   }
 
   return wrapped;
@@ -563,7 +563,8 @@ export function render(ctx: RenderContext): void {
   // wrap: wrap at ' | ' when content exceeds terminal width.
   // expanded: wrap at terminal width.
   const wrapWidth = lineLayout !== 'compact' && terminalWidth !== UNKNOWN_TERMINAL_WIDTH ? (terminalWidth ?? 0) : 0;
-  const visibleLines = physicalLines.flatMap(line => wrapLineToWidth(line, wrapWidth));
+  const shouldTruncate = lineLayout !== 'wrap';
+  const visibleLines = physicalLines.flatMap(line => wrapLineToWidth(line, wrapWidth, shouldTruncate));
 
   for (const line of visibleLines) {
     const outputLine = `${RESET}${line}`;
