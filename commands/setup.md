@@ -567,12 +567,14 @@ Use AskUserQuestion:
 - options:
   - "Compact (recommended)" — All info in one dense line: `[Opus] │ project │ Context ██░░ 45% │ Usage ██░░ 25% │ ...`
   - "Expanded" — Multi-line: Line 1 = model+project, Line 2 = context bar, Line 3 = usage bar, etc.
+  - "Wrap" — Compact layout that auto-wraps at terminal width
 
 Write `lineLayout` to config based on selection:
 | Selection | Config |
 |-----------|--------|
 | Compact | `lineLayout: "compact"`, `showSeparators: false` |
 | Expanded | (defaults, no keys needed) |
+| Wrap | `lineLayout: "wrap"`, `showSeparators: false` |
 
 ### Step 4b: Optional Features
 

@@ -42,6 +42,7 @@ Questions: **Turn Off → Turn On → Git Style → Layout/Reset → Language �
   - "Expanded (Recommended)" - Split into semantic lines (identity, project, environment, usage)
   - "Compact" - Everything on one line
   - "Compact + Separators" - One line with separator before activity
+  - "Wrap" - Compact layout that auto-wraps at terminal width
 
 ### Q2: Preset
 - header: "Preset"
@@ -155,9 +156,10 @@ Info items (Counts, Tokens, Usage, Speed, Duration) can be turned off via "Reset
 - question: "Change layout or reset to preset?"
 - multiSelect: false
 - options:
-  - "Keep current" - No layout/preset changes (current: Expanded/Compact/Compact + Separators)
+  - "Keep current" - No layout/preset changes (current: Expanded/Compact/Compact + Separators/Wrap)
   - "Switch to Expanded" - Split into semantic lines (if not current)
   - "Switch to Compact" - Everything on one line (if not current)
+  - "Switch to Wrap" - Compact layout that auto-wraps at terminal width (if not current)
   - "Reset to Full" - Enable everything
   - "Reset to Essential" - Activity + git only
 
@@ -214,6 +216,7 @@ If user chooses "Remove", set `display.customLine` to `""` in config.
 | Expanded | `lineLayout: "expanded", showSeparators: false` |
 | Compact | `lineLayout: "compact", showSeparators: false` |
 | Compact + Separators | `lineLayout: "compact", showSeparators: true` |
+| Wrap | `lineLayout: "wrap", showSeparators: false` |
 
 ---
 
