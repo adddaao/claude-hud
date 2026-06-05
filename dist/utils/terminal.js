@@ -20,43 +20,10 @@ function tryPowerShellWidth() {
     const now = Date.now();
     if (psCachedWidth !== null && now - psCachedAt < PS_CACHE_TTL)
         return psCachedWidth;
+    const script = path.join(VENDOR_DIR, 'windows', 'get-width.ps1');
     try {
         const output = execFileSync('powershell.exe', [
-            '-NoProfile', '-NonInteractive', '-Command',
-            `
-Add-Type -TypeDefinition '
-using System;
-using System.Runtime.InteropServices;
-public class CW {
-  [DllImport("kernel32.dll", SetLastError=true, CharSet=CharSet.Auto)]
-  static extern IntPtr CreateFile(string lp, uint ga, uint sm, IntPtr sa, uint cd, uint fa, IntPtr ht);
-  [DllImport("kernel32.dll", SetLastError=true)]
-  static extern bool GetConsoleScreenBufferInfoEx(IntPtr h, ref CONSOLE_SCREEN_BUFFER_INFOEX i);
-  [DllImport("kernel32.dll", SetLastError=true)]
-  static extern bool CloseHandle(IntPtr h);
-  [StructLayout(LayoutKind.Sequential)]
-  struct COORD { public short X,Y; }
-  [StructLayout(LayoutKind.Sequential)]
-  struct SMALL_RECT { public short L,T,R,B; }
-  [StructLayout(LayoutKind.Sequential)]
-  struct COLORREF { public uint D; }
-  [StructLayout(LayoutKind.Sequential)]
-  struct CONSOLE_SCREEN_BUFFER_INFOEX {
-    public uint cb; public COORD S,C; public ushort A; public SMALL_RECT W;
-    public COORD M; public ushort P; public bool F;
-    public COLORREF c0,c1,c2,c3,c4,c5,c6,c7,c8,c9,cA,cB,cC,cD,cE,cF;
-  }
-  public static int Cols() {
-    var h = CreateFile("CONOUT$", 0x80000000, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
-    if (h == (IntPtr)(-1)) return 0;
-    var inf = new CONSOLE_SCREEN_BUFFER_INFOEX(); inf.cb = (uint)Marshal.SizeOf(inf);
-    bool ok = GetConsoleScreenBufferInfoEx(h, ref inf);
-    CloseHandle(h);
-    return ok ? inf.W.R - inf.W.L + 1 : 0;
-  }
-}
-' -PassThru | Out-Null; [CW]::Cols()
-      `.trim(),
+            '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script,
         ], {
             encoding: 'utf8',
             stdio: ['ignore', 'pipe', 'ignore'],
