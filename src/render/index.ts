@@ -515,9 +515,6 @@ export function render(ctx: RenderContext): void {
     ? configuredMaxWidth
     : (detectedWidth ?? configuredMaxWidth ?? UNKNOWN_TERMINAL_WIDTH);
 
-  // DEBUG: log detected width to temp file
-  try { fs.writeFileSync(path.join(os.tmpdir(), 'claude-hud-debug.txt'), `${new Date().toISOString()} detected=${detectedWidth} terminal=${terminalWidth} layout=${lineLayout} platform=${process.platform} COLUMNS=${process.env.COLUMNS}\n`, { flag: 'a' }); } catch {}
-
   let lines: string[];
 
   if (lineLayout === 'expanded') {

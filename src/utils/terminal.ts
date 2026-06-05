@@ -83,6 +83,16 @@ export function getTerminalWidth(): number | null {
   if (stdout?.columns && stdout.rows) { dbg('return stdout.columns'); return stdout.columns; }
   if (stderr?.columns && stderr.rows) { dbg('return stderr.columns'); return stderr.columns; }
 
+  // COLUMNS env var: check early (before platform-specific methods) because
+  // when stdout is piped (statusline child process), native detection may
+  // return stale or default values while COLUMNS is explicitly set by the
+  // parent command to communicate the real terminal width.
+  if (env.COLUMNS) {
+    const cols = parseInt(env.COLUMNS, 10);
+    dbg('[columns] parsed=', cols);
+    if (cols > 0) return cols;
+  }
+
   dbg(`platform=${process.platform} entering block`);
 
   if (process.platform === 'win32') {
@@ -126,12 +136,6 @@ export function getTerminalWidth(): number | null {
       const tputCols = tryTputCols();
       if (tputCols !== null) return tputCols;
     }
-  }
-
-  if (env.COLUMNS) {
-    const cols = parseInt(env.COLUMNS, 10);
-    dbg('[columns] parsed=', cols);
-    if (cols > 0) return cols;
   }
 
   dbg('→ null');
