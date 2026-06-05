@@ -1,9 +1,18 @@
 import { execFileSync } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 export const UNKNOWN_TERMINAL_WIDTH = null;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const VENDOR_DIR = path.join(__dirname, '..', 'vendor');
+const DBG = path.join(os.tmpdir(), 'claude-hud-debug.txt');
+function dbg(...msgs) {
+    try {
+        fs.appendFileSync(DBG, msgs.join(' ') + '\n');
+    }
+    catch { }
+}
 function execVendorBinary(binaryPath, shell) {
     return execFileSync(binaryPath, [], {
         encoding: 'utf8',
@@ -11,8 +20,6 @@ function execVendorBinary(binaryPath, shell) {
         stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
 }
-// PowerShell fallback for Windows — uses P/Invoke to open CONOUT$ directly,
-// bypassing piped stdout.  Cached for 5s to avoid spawning powershell every call.
 let psCachedWidth = null;
 let psCachedAt = 0;
 const PS_CACHE_TTL = 5000;
@@ -36,8 +43,11 @@ function tryPowerShellWidth() {
             psCachedAt = now;
             return cols;
         }
+        dbg('[ps] output=', JSON.stringify(output));
     }
-    catch { }
+    catch (e) {
+        dbg('[ps] err=', e instanceof Error ? e.message : String(e));
+    }
     return null;
 }
 function tryBashStty() {
@@ -49,8 +59,11 @@ function tryBashStty() {
         const parts = output.split(/\s+/);
         if (parts.length === 2)
             return parseInt(parts[1], 10);
+        dbg('[stty] output=', JSON.stringify(output));
     }
-    catch { }
+    catch (e) {
+        dbg('[stty] err=', e instanceof Error ? e.message : String(e));
+    }
     return null;
 }
 function tryTputCols() {
@@ -64,24 +77,23 @@ function tryTputCols() {
 }
 export function getTerminalWidth() {
     const { env, stdout, stderr } = process;
+    dbg(`--- getTerminalWidth --- COLUMNS=${JSON.stringify(env.COLUMNS)} TERM=${JSON.stringify(env.TERM)}`);
     if (stdout?.columns && stdout.rows)
         return stdout.columns;
     if (stderr?.columns && stderr.rows)
         return stderr.columns;
     if (process.platform === 'win32') {
-        // 1. Native binary — works if console handle is not piped
         try {
             const size = execVendorBinary(path.join(VENDOR_DIR, 'windows', 'term-size.exe'), false).split(/\r?\n/);
             if (size.length === 2)
                 return parseInt(size[0], 10);
         }
-        catch { }
-        // 2. PowerShell — opens CONOUT$ directly, bypasses piped stdout
-        //    Most reliable for PowerShell+Git Bash setup. Cached 5s.
+        catch (e) {
+            dbg('[term-size] err=', e instanceof Error ? e.message : String(e));
+        }
         const psCols = tryPowerShellWidth();
         if (psCols !== null)
             return psCols;
-        // 3. Git Bash / MSYS2 — stty via /dev/tty
         const sttyCols = tryBashStty();
         if (sttyCols !== null)
             return sttyCols;
@@ -115,9 +127,11 @@ export function getTerminalWidth() {
     }
     if (env.COLUMNS) {
         const cols = parseInt(env.COLUMNS, 10);
+        dbg('[columns] parsed=', cols);
         if (cols > 0)
             return cols;
     }
+    dbg('→ null');
     return null;
 }
 export function getAdaptiveBarWidth() {
