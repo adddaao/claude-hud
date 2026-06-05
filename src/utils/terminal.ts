@@ -96,17 +96,17 @@ export function getTerminalWidth(): number | null {
   dbg(`platform=${process.platform} entering block`);
 
   if (process.platform === 'win32') {
-    dbg('trying term-size.exe...');
-    try {
-      const size = execVendorBinary(path.join(VENDOR_DIR, 'windows', 'term-size.exe'), false).split(/\r?\n/);
-      dbg('term-size result=', size.length, size[0]);
-      if (size.length === 2) return parseInt(size[0], 10);
-    } catch (e) { dbg('[term-size] err=', e instanceof Error ? e.message : String(e)); }
-
     dbg('trying powershell...');
     const psCols = tryPowerShellWidth();
     dbg('ps result=', psCols);
     if (psCols !== null) return psCols;
+
+    dbg('trying term-size.exe...');
+    try {
+      const size = execVendorBinary(path.join(VENDOR_DIR, 'windows', 'term-size.exe'), false).split(/\r?\n/);
+      dbg('term-size result=', size.length, size);
+      if (size.length === 2) return parseInt(size[1], 10);
+    } catch (e) { dbg('[term-size] err=', e instanceof Error ? e.message : String(e)); }
 
     dbg('trying stty...');
     const sttyCols = tryBashStty();
