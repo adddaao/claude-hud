@@ -78,24 +78,33 @@ function tryTputCols(): number | null {
 
 export function getTerminalWidth(): number | null {
   const { env, stdout, stderr } = process;
-  dbg(`--- getTerminalWidth --- COLUMNS=${JSON.stringify(env.COLUMNS)} TERM=${JSON.stringify(env.TERM)}`);
+  dbg(`--- getTerminalWidth --- COLUMNS=${JSON.stringify(env.COLUMNS)} TERM=${JSON.stringify(env.TERM)} stdout.cols=${stdout?.columns} stderr.cols=${stderr?.columns}`);
 
-  if (stdout?.columns && stdout.rows) return stdout.columns;
-  if (stderr?.columns && stderr.rows) return stderr.columns;
+  if (stdout?.columns && stdout.rows) { dbg('return stdout.columns'); return stdout.columns; }
+  if (stderr?.columns && stderr.rows) { dbg('return stderr.columns'); return stderr.columns; }
+
+  dbg(`platform=${process.platform} entering block`);
 
   if (process.platform === 'win32') {
+    dbg('trying term-size.exe...');
     try {
       const size = execVendorBinary(path.join(VENDOR_DIR, 'windows', 'term-size.exe'), false).split(/\r?\n/);
+      dbg('term-size result=', size.length, size[0]);
       if (size.length === 2) return parseInt(size[0], 10);
     } catch (e) { dbg('[term-size] err=', e instanceof Error ? e.message : String(e)); }
 
+    dbg('trying powershell...');
     const psCols = tryPowerShellWidth();
+    dbg('ps result=', psCols);
     if (psCols !== null) return psCols;
 
+    dbg('trying stty...');
     const sttyCols = tryBashStty();
+    dbg('stty result=', sttyCols);
     if (sttyCols !== null) return sttyCols;
 
     if (env.TERM) {
+      dbg('trying tput...');
       const tputCols = tryTputCols();
       if (tputCols !== null) return tputCols;
     }
