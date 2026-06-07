@@ -83,6 +83,9 @@ export const DEFAULT_CONFIG = {
         customLine: '',
         customLinePosition: 'last',
         timeFormat: 'relative',
+        showAdvisor: false,
+        advisorOverride: '',
+        autoCompactWindow: null,
     },
     colors: {
         context: 'green',
@@ -286,6 +289,12 @@ function validateNonNegativeInteger(value, fallback) {
     }
     return value;
 }
+function validateAutoCompactWindow(value) {
+    if (typeof value !== 'number' || !Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
+        return null;
+    }
+    return value;
+}
 function validateOptionalPath(value) {
     return typeof value === 'string' ? value.trim() : '';
 }
@@ -473,6 +482,13 @@ export function mergeConfig(userConfig) {
         timeFormat: validateTimeFormat(migrated.display?.timeFormat)
             ? migrated.display.timeFormat
             : DEFAULT_CONFIG.display.timeFormat,
+        showAdvisor: typeof migrated.display?.showAdvisor === 'boolean'
+            ? migrated.display.showAdvisor
+            : DEFAULT_CONFIG.display.showAdvisor,
+        advisorOverride: typeof migrated.display?.advisorOverride === 'string'
+            ? migrated.display.advisorOverride.slice(0, 80)
+            : DEFAULT_CONFIG.display.advisorOverride,
+        autoCompactWindow: validateAutoCompactWindow(migrated.display?.autoCompactWindow),
     };
     const colors = {
         context: validateColorValue(migrated.colors?.context)
