@@ -6,6 +6,7 @@ import { getAdaptiveBarWidth } from '../utils/terminal.js';
 import { renderCostEstimate } from './lines/cost.js';
 import { renderPromptCacheLine } from './lines/prompt-cache.js';
 import { renderSessionTimeLine } from './lines/session-time.js';
+import { renderAdvisorLine } from './lines/advisor.js';
 import { t } from '../i18n/index.js';
 import { formatResetTime } from './format-reset-time.js';
 const DEBUG = process.env.DEBUG?.includes('claude-hud') || process.env.DEBUG === '*';
@@ -15,8 +16,9 @@ const DEBUG = process.env.DEBUG?.includes('claude-hud') || process.env.DEBUG ===
  */
 export function renderSessionLine(ctx) {
     const model = formatModelName(getModelName(ctx.stdin), ctx.config?.display?.modelFormat, ctx.config?.display?.modelOverride);
-    const rawPercent = getContextPercent(ctx.stdin);
-    const bufferedPercent = getBufferedPercent(ctx.stdin);
+    const autoCompactWindow = ctx.config?.display?.autoCompactWindow ?? null;
+    const rawPercent = getContextPercent(ctx.stdin, autoCompactWindow);
+    const bufferedPercent = getBufferedPercent(ctx.stdin, autoCompactWindow);
     const autocompactMode = ctx.config?.display?.autocompactBuffer ?? 'enabled';
     const percent = autocompactMode === 'disabled' ? rawPercent : bufferedPercent;
     if (DEBUG && autocompactMode === 'disabled') {
@@ -271,6 +273,13 @@ export function renderSessionLine(ctx) {
             parts.push(label(`${t('format.tok')}: ${formatTokens(total)} (${t('format.in')}: ${formatTokens(st.inputTokens)}, ${t('format.out')}: ${formatTokens(st.outputTokens)})`, colors));
         }
     }
+    // Advisor model (when `/advisor` is configured for the session)
+    if (display?.showAdvisor) {
+        const advisorLine = renderAdvisorLine(ctx);
+        if (advisorLine) {
+            parts.push(advisorLine);
+        }
+    }
     if (display?.showDuration !== false && ctx.sessionDuration) {
         parts.push(label(`⏱️  ${ctx.sessionDuration}`, colors));
     }
@@ -321,7 +330,13 @@ function formatTokens(n) {
 }
 function formatContextValue(ctx, percent, mode) {
     const totalTokens = getTotalTokens(ctx.stdin);
-    const size = ctx.stdin.context_window?.context_window_size ?? 0;
+    const autoCompactWindow = ctx.config?.display?.autoCompactWindow ?? null;
+    // When an explicit auto-compact window is configured, use it as the token
+    // denominator so the tokens/both displays match the percentage (and /context),
+    // rather than the full model context window.
+    const size = typeof autoCompactWindow === 'number' && autoCompactWindow > 0
+        ? autoCompactWindow
+        : ctx.stdin.context_window?.context_window_size ?? 0;
     if (mode === 'tokens') {
         if (size > 0) {
             return `${formatTokens(totalTokens)}/${formatTokens(size)}`;

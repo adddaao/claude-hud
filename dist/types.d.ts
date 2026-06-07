@@ -114,6 +114,7 @@ export interface TranscriptData {
     sessionTokens?: SessionTokenUsage;
     lastCompactBoundaryAt?: Date;
     lastCompactPostTokens?: number;
+    advisorModel?: string;
 }
 export interface RenderContext {
     stdin: StdinData;
