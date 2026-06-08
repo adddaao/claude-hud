@@ -4,6 +4,28 @@ import { PassThrough } from 'node:stream';
 import { readStdin, getProviderLabel, getContextPercent, getBufferedPercent } from '../dist/stdin.js';
 import { mergeConfig } from '../dist/config.js';
 
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_BASE_URL',
+  'DEEPSEEK_API_KEY',
+  'ZHIPU_API_KEY',
+  'CLAUDE_CODE_USE_VERTEX',
+];
+
+function withCleanProviderEnv(fn) {
+  const original = new Map(PROVIDER_ENV_KEYS.map(key => [key, process.env[key]]));
+  for (const key of PROVIDER_ENV_KEYS) {
+    delete process.env[key];
+  }
+  try {
+    return fn();
+  } finally {
+    for (const [key, value] of original) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 test('readStdin returns null for TTY input', async () => {
   const originalIsTTY = process.stdin.isTTY;
   Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
@@ -172,7 +194,7 @@ test('getProviderLabel returns null when CLAUDE_CODE_USE_BEDROCK is not set', ()
   const orig = process.env.CLAUDE_CODE_USE_BEDROCK;
   try {
     delete process.env.CLAUDE_CODE_USE_BEDROCK;
-    const result = getProviderLabel({ model: { id: 'anthropic.claude-sonnet-4-6' } });
+    const result = withCleanProviderEnv(() => getProviderLabel({ model: { id: 'anthropic.claude-sonnet-4-6' } }));
     assert.equal(result, null);
   } finally {
     if (orig === undefined) delete process.env.CLAUDE_CODE_USE_BEDROCK;
@@ -184,7 +206,7 @@ test('getProviderLabel returns null for cross-region model ID without env var', 
   const orig = process.env.CLAUDE_CODE_USE_BEDROCK;
   try {
     delete process.env.CLAUDE_CODE_USE_BEDROCK;
-    const result = getProviderLabel({ model: { id: 'us.anthropic.claude-sonnet-4-6' } });
+    const result = withCleanProviderEnv(() => getProviderLabel({ model: { id: 'us.anthropic.claude-sonnet-4-6' } }));
     assert.equal(result, null);
   } finally {
     if (orig === undefined) delete process.env.CLAUDE_CODE_USE_BEDROCK;
@@ -196,7 +218,7 @@ test('getProviderLabel returns null when CLAUDE_CODE_USE_BEDROCK=0', () => {
   const orig = process.env.CLAUDE_CODE_USE_BEDROCK;
   try {
     process.env.CLAUDE_CODE_USE_BEDROCK = '0';
-    const result = getProviderLabel({ model: { id: 'anthropic.claude-sonnet-4-6' } });
+    const result = withCleanProviderEnv(() => getProviderLabel({ model: { id: 'anthropic.claude-sonnet-4-6' } }));
     assert.equal(result, null);
   } finally {
     if (orig === undefined) delete process.env.CLAUDE_CODE_USE_BEDROCK;

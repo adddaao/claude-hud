@@ -7,9 +7,6 @@ import { isCjkLanguage } from '../i18n/index.js';
 // visual width and the terminal itself wraps.
 // https://www.unicode.org/reports/tr11/
 
-// Cache the result so we don't re-detect on every call.
-let _cachedCjkAmbiguousWide: boolean | null = null;
-
 function detectCjkTerminal(): boolean {
   // 1. HUD language explicitly set to CJK
   if (isCjkLanguage()) return true;
@@ -30,10 +27,7 @@ function detectCjkTerminal(): boolean {
 }
 
 export function isCjkAmbiguousWide(): boolean {
-  if (_cachedCjkAmbiguousWide === null) {
-    _cachedCjkAmbiguousWide = detectCjkTerminal();
-  }
-  return _cachedCjkAmbiguousWide;
+  return detectCjkTerminal();
 }
 
 export function isWideCodePoint(codePoint: number): boolean {

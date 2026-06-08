@@ -29,6 +29,29 @@ function stripAnsi(str) {
     .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
 }
 
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_BASE_URL',
+  'DEEPSEEK_API_KEY',
+  'ZHIPU_API_KEY',
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_VERTEX',
+];
+
+function withCleanProviderEnv(fn) {
+  const original = new Map(PROVIDER_ENV_KEYS.map(key => [key, process.env[key]]));
+  for (const key of PROVIDER_ENV_KEYS) {
+    delete process.env[key];
+  }
+  try {
+    return fn();
+  } finally {
+    for (const [key, value] of original) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
 function baseContext() {
   return {
     stdin: {
@@ -349,7 +372,7 @@ test('renderSessionLine displays project name from Windows cwd', { skip: process
 test('renderSessionLine handles root path gracefully', () => {
   const ctx = baseContext();
   ctx.stdin.cwd = '/';
-  const line = renderSessionLine(ctx);
+  const line = withCleanProviderEnv(() => renderSessionLine(ctx));
   assert.ok(line.includes('[Opus]'));
 });
 
@@ -436,7 +459,7 @@ test('render expanded layout includes prompt cache as its own opt-in element', (
 test('renderSessionLine omits project name when cwd is undefined', () => {
   const ctx = baseContext();
   ctx.stdin.cwd = undefined;
-  const line = renderSessionLine(ctx);
+  const line = withCleanProviderEnv(() => renderSessionLine(ctx));
   assert.ok(line.includes('[Opus]'));
 });
 
@@ -494,7 +517,7 @@ test('renderSessionLine places customLine before model badge when position is fi
   const ctx = baseContext();
   ctx.config.display.customLine = 'prod-server';
   ctx.config.display.customLinePosition = 'first';
-  const line = stripAnsi(renderSessionLine(ctx));
+  const line = withCleanProviderEnv(() => stripAnsi(renderSessionLine(ctx)));
   const customIdx = line.indexOf('prod-server');
   const modelIdx = line.indexOf('[Opus]');
   assert.ok(customIdx >= 0, 'should include custom line');
@@ -616,7 +639,7 @@ test('renderProjectLine places customLine before model badge when position is fi
   ctx.stdin.cwd = '/tmp/my-project';
   ctx.config.display.customLine = 'prod-server';
   ctx.config.display.customLinePosition = 'first';
-  const line = stripAnsi(renderProjectLine(ctx) ?? '');
+  const line = withCleanProviderEnv(() => stripAnsi(renderProjectLine(ctx) ?? ''));
   const customIdx = line.indexOf('prod-server');
   const modelIdx = line.indexOf('[Opus]');
   assert.ok(customIdx >= 0, 'should include custom line');
@@ -683,7 +706,7 @@ test('renderProjectLine uses configurable element colors', () => {
   ctx.config.colors.gitBranch = '#33ff00';
   ctx.config.colors.custom = '#ff6600';
 
-  const line = renderProjectLine(ctx);
+  const line = withCleanProviderEnv(() => renderProjectLine(ctx));
   assert.ok(line?.includes('\x1b[38;5;214m[Opus]\x1b[0m'));
   assert.ok(line?.includes('\x1b[38;5;82mmy-project\x1b[0m'));
   assert.ok(line?.includes('\x1b[38;5;220mgit:(\x1b[0m'));
@@ -1490,8 +1513,8 @@ test('renderSessionLine displays external balance labels', () => {
     balanceLabel: '¥6.35',
   };
 
-  const line = stripAnsi(renderSessionLine(ctx));
-  assert.ok(line.includes('Usage ¥6.35'), `should show balance label in compact layout: ${line}`);
+  const line = withCleanProviderEnv(() => stripAnsi(renderSessionLine(ctx)));
+  assert.ok(line.includes('Balance ¥6.35'), `should show balance label in compact layout: ${line}`);
   assert.ok(!line.includes('5h'), `should bypass percentage window rendering: ${line}`);
 });
 
@@ -1690,7 +1713,7 @@ test('renderUsageLine displays external balance labels', () => {
   };
 
   const line = stripAnsi(renderUsageLine(ctx) ?? '');
-  assert.equal(line, 'Usage ¥6.35');
+  assert.equal(line, 'Balance ¥6.35');
 });
 
 test('renderUsageLine can hide reset label in text-only mode', () => {
@@ -1916,7 +1939,7 @@ test('quotaBar and coloredBar use custom barFilled and barEmpty characters', () 
   assert.ok(!usageLine.includes('█'), `should not contain default filled char, got: ${JSON.stringify(usageLine)}`);
   assert.ok(!usageLine.includes('░'), `should not contain default empty char, got: ${JSON.stringify(usageLine)}`);
 
-  const identityLine = renderIdentityLine(ctx);
+  const identityLine = withTerminal(120, () => renderIdentityLine(ctx));
   assert.ok(identityLine.includes('●'), `expected custom filled char in context bar, got: ${JSON.stringify(identityLine)}`);
   assert.ok(identityLine.includes('○'), `expected custom empty char in context bar, got: ${JSON.stringify(identityLine)}`);
 });
@@ -2851,7 +2874,7 @@ test('renderSessionLine renders advisor inline on the same row (compact layout)'
   ctx.stdin.cwd = '/tmp/my-project';
   ctx.config = mergeConfig({ lineLayout: 'compact', display: { showAdvisor: true } });
   ctx.transcript.advisorModel = 'claude-opus-4-7';
-  const plain = stripAnsi(renderSessionLine(ctx));
+  const plain = withCleanProviderEnv(() => stripAnsi(renderSessionLine(ctx)));
   assert.ok(plain.includes('Advisor: Opus 4.7'), `advisor segment missing: ${plain}`);
   assert.ok(plain.includes('[Opus]'), 'model badge must still render first');
   assert.ok(!plain.includes('\n'), 'compact session line must remain one row');

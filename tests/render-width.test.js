@@ -1,8 +1,37 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '../dist/render/index.js';
 import { mergeConfig } from '../dist/config.js';
 import { setLanguage } from '../dist/i18n/index.js';
+
+const ORIGINAL_ENV_COLUMNS = process.env.COLUMNS;
+const ORIGINAL_DISABLE_WIDTH_PROBES = process.env.CLAUDE_HUD_DISABLE_WIDTH_PROBES;
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_BASE_URL',
+  'DEEPSEEK_API_KEY',
+  'ZHIPU_API_KEY',
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_VERTEX',
+];
+const ORIGINAL_PROVIDER_ENV = new Map(PROVIDER_ENV_KEYS.map(key => [key, process.env[key]]));
+delete process.env.COLUMNS;
+process.env.CLAUDE_HUD_DISABLE_WIDTH_PROBES = '1';
+for (const key of PROVIDER_ENV_KEYS) {
+  delete process.env[key];
+}
+
+after(() => {
+  if (ORIGINAL_ENV_COLUMNS === undefined) delete process.env.COLUMNS;
+  else process.env.COLUMNS = ORIGINAL_ENV_COLUMNS;
+
+  if (ORIGINAL_DISABLE_WIDTH_PROBES === undefined) delete process.env.CLAUDE_HUD_DISABLE_WIDTH_PROBES;
+  else process.env.CLAUDE_HUD_DISABLE_WIDTH_PROBES = ORIGINAL_DISABLE_WIDTH_PROBES;
+
+  for (const [key, value] of ORIGINAL_PROVIDER_ENV) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
 
 function baseContext() {
   return {
@@ -92,7 +121,7 @@ function withColumns(stream, columns, fn) {
   const originalColumns = stream.columns;
   Object.defineProperty(stream, 'columns', { value: columns, configurable: true });
   try {
-    fn();
+    return fn();
   } finally {
     if (originalColumns === undefined) {
       delete stream.columns;
@@ -103,7 +132,7 @@ function withColumns(stream, columns, fn) {
 }
 
 function withTerminal(columns, fn) {
-  withColumns(process.stdout, columns, fn);
+  return withColumns(process.stdout, columns, fn);
 }
 
 function captureRender(ctx) {
@@ -124,6 +153,7 @@ function countContaining(lines, needle) {
 
 test('render wraps long lines to terminal width and keeps all activity lines visible', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
   ctx.stdin.model = { display_name: 'Sonnet 4.6' };
   ctx.stdin.cwd = '/tmp/very-long-project-name-for-terminal-wrap-checking';
   ctx.gitStatus = {
@@ -131,7 +161,7 @@ test('render wraps long lines to terminal width and keeps all activity lines vis
     isDirty: true,
     ahead: 7,
     behind: 0,
-    fileStats: { modified: 12, added: 4, deleted: 2, untracked: 9 },
+    fileStats: { modified: 12, added: 4, deleted: 2, untracked: 9, trackedFiles: [] },
   };
   ctx.config.gitStatus.showFileStats = true;
   ctx.claudeMdCount = 1;
@@ -171,6 +201,7 @@ test('render wraps long lines to terminal width and keeps all activity lines vis
 
 test('render can wrap git to its own line without truncating the branch name', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'wrap';
   ctx.stdin.cwd = '/tmp/project-with-a-long-name';
   ctx.gitStatus = {
     branch: 'feature/this-is-a-very-long-branch-name',
@@ -191,6 +222,7 @@ test('render can wrap git to its own line without truncating the branch name', (
 
 test('render falls back to COLUMNS env when stdout.columns is unavailable', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
   ctx.stdin.cwd = '/tmp/project';
   ctx.extraLabel = '你好你好你好你好你好';
   const originalEnvColumns = process.env.COLUMNS;
@@ -216,6 +248,7 @@ test('render falls back to COLUMNS env when stdout.columns is unavailable', () =
 
 test('render falls back to stderr.columns when stdout.columns and COLUMNS are unavailable', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
   const originalEnvColumns = process.env.COLUMNS;
 
   let lines = [];
@@ -241,6 +274,7 @@ test('render falls back to stderr.columns when stdout.columns and COLUMNS are un
 
 test('render does not use maxWidth over a detected 80-column width unless forceMaxWidth is enabled', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
   ctx.stdin.cwd = '/tmp/project';
   ctx.config.maxWidth = 300;
   ctx.extraLabel = 'x'.repeat(120);
@@ -255,6 +289,7 @@ test('render does not use maxWidth over a detected 80-column width unless forceM
 
 test('render ignores forceMaxWidth when maxWidth is null', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
   ctx.stdin.cwd = '/tmp/project';
   ctx.config.forceMaxWidth = true;
   ctx.extraLabel = 'x'.repeat(120);
@@ -269,6 +304,7 @@ test('render ignores forceMaxWidth when maxWidth is null', () => {
 
 test('render ignores forceMaxWidth when maxWidth is invalid in user config', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
   ctx.stdin.cwd = '/tmp/project';
   ctx.config = {
     ...ctx.config,
@@ -350,7 +386,7 @@ test('render ignores BEL-terminated OSC 8 hyperlink sequences when measuring lin
 
 test('render closes an OSC 8 hyperlink when truncation cuts inside it', () => {
   const ctx = baseContext();
-  ctx.config.lineLayout = 'compact';
+  ctx.config.lineLayout = 'expanded';
   ctx.stdin.context_window.current_usage.input_tokens = 0;
   ctx.config.display.showContextBar = false;
   ctx.config.display.showConfigCounts = false;
@@ -431,6 +467,7 @@ test('render does not wrap when no real terminal width is available', () => {
 
 test('render uses config.maxWidth as fallback when terminal width is unavailable', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
   ctx.stdin.model = { display_name: 'Sonnet 4.6' };
   ctx.stdin.cwd = '/tmp/very-long-project-name-for-maxwidth-fallback';
   ctx.config.maxWidth = 30;
@@ -485,6 +522,7 @@ test('render ignores config.maxWidth when terminal width is detected', () => {
 
 test('render treats an actual 40-column terminal as a real width', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
   ctx.stdin.cwd = '/tmp/very-long-project-name-for-real-40-column-check';
   ctx.extraLabel = 'extra-segment-for-40-column-check';
 
@@ -545,6 +583,7 @@ test('render does not strand a bare 5h continuation line in compact mode', () =>
 
 test('render treats COLUMNS env as a hard override over stdout width', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
   ctx.stdin.cwd = '/tmp/very-long-project-name-for-width-checking';
   const originalEnvColumns = process.env.COLUMNS;
   process.env.COLUMNS = '10';
@@ -612,6 +651,7 @@ test('render clamps separator width in narrow terminals', () => {
 
 test('render truncation respects Unicode display width', () => {
   const ctx = baseContext();
+  ctx.config.lineLayout = 'expanded';
   ctx.stdin.cwd = '/tmp/project';
   ctx.extraLabel = '你好你好你好你好你好';
 

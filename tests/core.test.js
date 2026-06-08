@@ -19,6 +19,28 @@ function restoreEnvVar(name, value) {
   process.env[name] = value;
 }
 
+const PROVIDER_ENV_KEYS = [
+  'ANTHROPIC_BASE_URL',
+  'DEEPSEEK_API_KEY',
+  'ZHIPU_API_KEY',
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_VERTEX',
+];
+
+function withCleanProviderEnv(fn) {
+  const original = new Map(PROVIDER_ENV_KEYS.map(key => [key, process.env[key]]));
+  for (const key of PROVIDER_ENV_KEYS) {
+    delete process.env[key];
+  }
+  try {
+    return fn();
+  } finally {
+    for (const [key, value] of original) {
+      restoreEnvVar(key, value);
+    }
+  }
+}
+
 async function getTranscriptCacheFile(configDir) {
   const cacheDir = path.join(configDir, 'plugins', 'claude-hud', 'transcript-cache');
   const files = await readdir(cacheDir);
@@ -379,13 +401,13 @@ test('bedrock model detection recognizes bedrock ids', () => {
   assert.ok(isBedrockModelId('anthropic.claude-3-5-sonnet-20240620-v1:0'));
   assert.ok(isBedrockModelId('eu.anthropic.claude-opus-4-5-20251101-v1:0'));
   assert.equal(isBedrockModelId('claude-3-5-sonnet-20241022'), false);
-  process.env.CLAUDE_CODE_USE_BEDROCK = '1';
-  try {
+  withCleanProviderEnv(() => {
+    process.env.CLAUDE_CODE_USE_BEDROCK = '1';
     assert.equal(getProviderLabel({ model: { id: 'anthropic.claude-3-5-sonnet-20240620-v1:0' } }), 'Bedrock');
-  } finally {
-    delete process.env.CLAUDE_CODE_USE_BEDROCK;
-  }
-  assert.equal(getProviderLabel({ model: { id: 'claude-3-5-sonnet-20241022' } }), null);
+  });
+  withCleanProviderEnv(() => {
+    assert.equal(getProviderLabel({ model: { id: 'claude-3-5-sonnet-20241022' } }), null);
+  });
 });
 
 test('resolveSessionCost prefers native stdin cost when available', () => {

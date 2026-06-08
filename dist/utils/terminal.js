@@ -78,14 +78,6 @@ function tryTputCols() {
 export function getTerminalWidth() {
     const { env, stdout, stderr } = process;
     dbg(`--- getTerminalWidth --- COLUMNS=${JSON.stringify(env.COLUMNS)} TERM=${JSON.stringify(env.TERM)} stdout.cols=${stdout?.columns} stderr.cols=${stderr?.columns}`);
-    if (stdout?.columns && stdout.rows) {
-        dbg('return stdout.columns');
-        return stdout.columns;
-    }
-    if (stderr?.columns && stderr.rows) {
-        dbg('return stderr.columns');
-        return stderr.columns;
-    }
     // COLUMNS env var: check early (before platform-specific methods) because
     // when stdout is piped (statusline child process), native detection may
     // return stale or default values while COLUMNS is explicitly set by the
@@ -95,6 +87,18 @@ export function getTerminalWidth() {
         dbg('[columns] parsed=', cols);
         if (cols > 0)
             return cols;
+    }
+    if (stdout?.columns) {
+        dbg('return stdout.columns');
+        return stdout.columns;
+    }
+    if (stderr?.columns) {
+        dbg('return stderr.columns');
+        return stderr.columns;
+    }
+    if (env.CLAUDE_HUD_DISABLE_WIDTH_PROBES === '1') {
+        dbg('width probes disabled');
+        return null;
     }
     dbg(`platform=${process.platform} entering block`);
     if (process.platform === 'win32') {

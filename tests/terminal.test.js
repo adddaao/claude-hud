@@ -6,12 +6,15 @@ describe('getAdaptiveBarWidth', () => {
   let originalStdoutColumns;
   let originalStderrColumns;
   let originalEnvColumns;
+  let originalDisableWidthProbes;
 
   beforeEach(() => {
     originalStdoutColumns = Object.getOwnPropertyDescriptor(process.stdout, 'columns');
     originalStderrColumns = Object.getOwnPropertyDescriptor(process.stderr, 'columns');
     originalEnvColumns = process.env.COLUMNS;
+    originalDisableWidthProbes = process.env.CLAUDE_HUD_DISABLE_WIDTH_PROBES;
     delete process.env.COLUMNS;
+    process.env.CLAUDE_HUD_DISABLE_WIDTH_PROBES = '1';
   });
 
   afterEach(() => {
@@ -29,6 +32,11 @@ describe('getAdaptiveBarWidth', () => {
       process.env.COLUMNS = originalEnvColumns;
     } else {
       delete process.env.COLUMNS;
+    }
+    if (originalDisableWidthProbes !== undefined) {
+      process.env.CLAUDE_HUD_DISABLE_WIDTH_PROBES = originalDisableWidthProbes;
+    } else {
+      delete process.env.CLAUDE_HUD_DISABLE_WIDTH_PROBES;
     }
   });
 
