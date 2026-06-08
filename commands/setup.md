@@ -158,11 +158,11 @@ echo $OSTYPE
 
    The command exports `COLUMNS` so the HUD knows the real terminal width.
    Claude Code pipes the subprocess stdout, so `process.stdout.columns` is
-   unavailable at runtime. `stty size </dev/tty` reads from the controlling
-   terminal. If that fails (e.g. Windows Git Bash where `/dev/tty` is
-   unavailable in child processes), `tput cols` is tried as a fallback.
-   The `- 4` accounts for Claude Code's input area padding
-   (2 columns on each side).
+   unavailable at runtime. `tput cols` reads the current terminal width
+   (works on all platforms: macOS, Linux, Windows Git Bash). The `- 4`
+   accounts for Claude Code's input area padding (2 columns on each side).
+   Avoid `awk '{print $2}'` from `stty size` output — the `$2` gets eaten
+   by template processing when setup writes settings.json.
 
    The grep pattern uses `[[:space:]]` rather than `\t` to match the tab
    separator emitted by awk. GNU grep (BRE/ERE) does **not** interpret
@@ -197,7 +197,7 @@ On Windows require `node` and always use `dist/index.js`.
 Instead, use `sort -V` (GNU version sort, included with Git for Windows) which avoids nested single quotes entirely. Also avoid wrapping the generated command in a second `bash -c ...` layer. Claude Code is already invoking the statusline through bash, so the direct shell command lets `exec` replace that shell instead of spawning an extra bash wrapper first. The command still exports `COLUMNS` so the HUD receives the real terminal width, and it uses the marketplace-aware cache glob:
 
    ```
-   cols=$(stty size </dev/tty 2>/dev/null | awk '{print $2}'); cols=${cols:-$(tput cols 2>/dev/null)}; export COLUMNS=$(( ${cols:-120} > 4 ? ${cols:-120} - 4 : 1 )); plugin_dir=$(ls -1d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-hud/*/ 2>/dev/null | sort -V | tail -1); exec "{RUNTIME_PATH}" "${plugin_dir}{SOURCE}"
+   cols=$(tput cols 2>/dev/null); export COLUMNS=$(( ${cols:-120} > 4 ? ${cols:-120} - 4 : 1 )); plugin_dir=$(ls -1d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-hud/*/ 2>/dev/null | sort -V | tail -1); exec "{RUNTIME_PATH}" "${plugin_dir}{SOURCE}"
    ```
 
 **Windows + PowerShell** (Platform: `win32`, Shell: `powershell`, `pwsh`, or `cmd`, OSTYPE: other/empty):
