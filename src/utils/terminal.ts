@@ -76,6 +76,21 @@ function tryTputCols(): number | null {
   return null;
 }
 
+function trySttyF(): number | null {
+  try {
+    const output = execFileSync('stty', ['-F', '/dev/tty', 'size'], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    }).trim();
+    const parts = output.split(/\s+/);
+    if (parts.length === 2) return parseInt(parts[1], 10);
+    dbg('[stty -F] output=', JSON.stringify(output));
+  } catch (e) {
+    dbg('[stty -F] err=', e instanceof Error ? e.message : String(e));
+  }
+  return null;
+}
+
 export function getTerminalWidth(): number | null {
   const { env, stdout, stderr } = process;
   dbg(`--- getTerminalWidth --- COLUMNS=${JSON.stringify(env.COLUMNS)} TERM=${JSON.stringify(env.TERM)} stdout.cols=${stdout?.columns} stderr.cols=${stderr?.columns}`);
@@ -114,23 +129,23 @@ export function getTerminalWidth(): number | null {
     } catch (e) { dbg('[term-size] err=', e instanceof Error ? e.message : String(e)); }
 
     dbg('trying stty...');
-    const sttyCols = tryBashStty();
-    dbg('stty result=', sttyCols);
-    if (sttyCols !== null) return sttyCols;
+    const winSttyCols = tryBashStty();
+    dbg('stty result=', winSttyCols);
+    if (winSttyCols !== null) return winSttyCols;
 
     if (env.TERM) {
       dbg('trying tput...');
       const tputCols = tryTputCols();
       if (tputCols !== null) return tputCols;
     }
-  } else {
-    if (process.platform === 'darwin') {
-      try {
-        const size = execVendorBinary(path.join(VENDOR_DIR, 'macos', 'term-size'), true).split(/\r?\n/);
-        if (size.length === 2) return parseInt(size[0], 10);
-      } catch {}
-    }
+  } else if (process.platform === 'darwin') {
+    dbg('macOS: trying term-size binary...');
+    try {
+      const size = execVendorBinary(path.join(VENDOR_DIR, 'macos', 'term-size'), true).split(/\r?\n/);
+      if (size.length === 2) return parseInt(size[0], 10);
+    } catch {}
 
+    dbg('macOS: trying resize -u...');
     try {
       const output = execFileSync('resize', ['-u'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
       const size = output.match(/\d+/g);
@@ -138,6 +153,24 @@ export function getTerminalWidth(): number | null {
     } catch {}
 
     if (env.TERM) {
+      dbg('macOS: trying tput cols...');
+      const tputCols = tryTputCols();
+      if (tputCols !== null) return tputCols;
+    }
+  } else {
+    // Linux and other Unix-like systems
+    dbg('linux: trying stty -F /dev/tty...');
+    const sttyCols = trySttyF();
+    dbg('stty -F result=', sttyCols);
+    if (sttyCols !== null) return sttyCols;
+
+    dbg('linux: trying bash stty...');
+    const bashSttyCols = tryBashStty();
+    dbg('bash stty result=', bashSttyCols);
+    if (bashSttyCols !== null) return bashSttyCols;
+
+    if (env.TERM) {
+      dbg('linux: trying tput cols...');
       const tputCols = tryTputCols();
       if (tputCols !== null) return tputCols;
     }
