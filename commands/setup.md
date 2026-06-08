@@ -159,10 +159,21 @@ echo $OSTYPE
    The command exports `COLUMNS` so the HUD knows the real terminal width.
    Claude Code pipes the subprocess stdout, so `process.stdout.columns` is
    unavailable at runtime. `tput cols` reads the current terminal width
-   (works on all platforms: macOS, Linux, Windows Git Bash). The `- 4`
-   accounts for Claude Code's input area padding (2 columns on each side).
+   and works on all platforms (macOS, Linux, Windows Git Bash).
+   The `- 4` accounts for Claude Code's input area padding
+   (2 columns on each side).
+
    Avoid `awk '{print $2}'` from `stty size` output — the `$2` gets eaten
    by template processing when setup writes settings.json.
+
+   When a TTY file descriptor is available, `tput` queries it via ioctl
+   for the actual terminal size. When no TTY fd exists (piped stdout),
+   `tput` falls back to the `COLUMNS` environment variable, and if that
+   is unset or zero, to the terminfo default (typically 80 for xterm).
+   The `${cols:-120}` fallback handles the case where `tput` fails
+   entirely (e.g. missing terminfo entry). On very wide terminals this
+   may cause earlier wrapping than necessary; users can set a custom
+   `maxWidth` in their HUD config to override.
 
    The grep pattern uses `[[:space:]]` rather than `\t` to match the tab
    separator emitted by awk. GNU grep (BRE/ERE) does **not** interpret
