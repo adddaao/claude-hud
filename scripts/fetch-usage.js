@@ -146,7 +146,7 @@ function detectProviderFromBaseUrl(baseUrl) {
 }
 
 async function main() {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY || '';
+  const anthropicKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || '';
   const deepseekKey = process.env.DEEPSEEK_API_KEY || '';
   const zhipuKey = process.env.ZHIPU_API_KEY || '';
 
