@@ -509,7 +509,7 @@ function renderExpanded(ctx: RenderContext, terminalWidth: number | null = null)
 export function render(ctx: RenderContext): void {
   const lineLayout = ctx.config?.lineLayout ?? 'expanded';
   const showSeparators = ctx.config?.showSeparators ?? false;
-  const detectedWidth = getTerminalWidth();
+  const detectedWidth = getTerminalWidth() ?? 120;
   const configuredMaxWidth = ctx.config?.maxWidth ?? UNKNOWN_TERMINAL_WIDTH;
   const terminalWidth = ctx.config?.forceMaxWidth && configuredMaxWidth !== UNKNOWN_TERMINAL_WIDTH
     ? configuredMaxWidth
