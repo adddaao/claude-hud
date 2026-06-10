@@ -24,7 +24,9 @@ TEMP_FILES=$(ls -d "$CLAUDE_DIR/plugins/cache/temp_local_"* 2>/dev/null | head -
 echo "Cache: $CACHE_EXISTS | Registry: $REGISTRY_EXISTS | Temp: ${TEMP_FILES:-none}"
 ```
 
-**Windows (PowerShell)**:
+**Windows (Git Bash / MSYS2 / Cygwin)**: If Platform is `win32` and Shell is `bash` (or `echo $OSTYPE` returns `msys` or `cygwin`), use the **macOS/Linux** bash commands above. Git Bash provides the same Unix tools (`ls`, `grep`, etc.) and file paths use the same `${CLAUDE_CONFIG_DIR:-$HOME/.claude}` form.
+
+**Windows (PowerShell)** — use only when Shell is `powershell`, `pwsh`, or `cmd` AND `$OSTYPE` is NOT `msys`/`cygwin`:
 ```powershell
 $claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
 $cache = (Get-ChildItem (Join-Path $claudeDir "plugins\cache") -Directory | ForEach-Object { Test-Path (Join-Path $_.FullName "claude-hud") }) -contains $true
@@ -63,7 +65,9 @@ rm -rf "$CLAUDE_DIR/plugins/cache/temp_local_"*
 echo '{"version": 2, "plugins": {}}' > "$CLAUDE_DIR/plugins/installed_plugins.json"
 ```
 
-**Windows (PowerShell)**:
+**Windows (Git Bash / MSYS2 / Cygwin)**: Use the **macOS/Linux** cleanup commands above — Git Bash provides `rm`, `echo`, etc.
+
+**Windows (PowerShell)** — use only when Shell is `powershell`, `pwsh`, or `cmd` AND `$OSTYPE` is NOT `msys`/`cygwin`:
 ```powershell
 $claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
 
@@ -248,7 +252,7 @@ Instead, use `sort -V` (GNU version sort, included with Git for Windows) which a
    2. `$Host.UI.RawUI.WindowSize.Width` — works in some non-interactive sessions
    3. `cmd /c 'mode con'` — reads console buffer info directly, most reliable in headless subprocess
    If none succeed, `COLUMNS` is not set and the Node.js process tries its own detection (including `mode.com con`).
-   The macOS/Linux branch sidesteps this with `${cols:-120}` (`stty size` falls back when the controlling terminal is missing); the PowerShell equivalent is the multi-method fallback chain above.
+   The macOS/Linux and Windows Git Bash branches sidestep this with `tput cols` and a `${cols:-120}` fallback; the PowerShell equivalent is the multi-method fallback chain above.
 
    Inline `powershell -Command "..."` strings in `settings.json` make `try/catch` and multi-line control flow awkward because of nested quoting and the `cmd /s /c` rules that wrap the call. A standalone `.ps1` wrapper is the PowerShell equivalent of the macOS/Linux `bash -c '...'` script body — proper control flow, no JSON-string quoting pressure, and a single source of truth that future PS-side fixes can extend.
 
@@ -377,7 +381,9 @@ process.stdin.on("end", () => {
 fi
 ```
 
-**Windows (PowerShell)**:
+**Windows (Git Bash / MSYS2 / Cygwin)**: Use the **macOS/Linux** `{RUNTIME_PATH} -e '...'` script above — Git Bash provides `node` and `printf`. The `$CLAUDE_CONFIG_DIR` / `$HOME` variable expansion works identically.
+
+**Windows (PowerShell)** — use only when Shell is `powershell`, `pwsh`, or `cmd` AND `$OSTYPE` is NOT `msys`/`cygwin`:
 ```powershell
 $settingsPath = if ($env:CLAUDE_CONFIG_DIR) { Join-Path $env:CLAUDE_CONFIG_DIR "settings.json" } else { Join-Path $HOME ".claude\settings.json" }
 $existingCommand = ""
@@ -442,7 +448,9 @@ if [ -f "$SETTINGS" ]; then
 fi
 ```
 
-**Windows (PowerShell)**:
+**Windows (Git Bash / MSYS2 / Cygwin)**: Use the **macOS/Linux** backup commands above — Git Bash provides `date`, `cp`, and the same variable expansion.
+
+**Windows (PowerShell)** — use only when Shell is `powershell`, `pwsh`, or `cmd` AND `$OSTYPE` is NOT `msys`/`cygwin`:
 ```powershell
 $backupPath = ""
 if (Test-Path $settingsPath) {
@@ -502,7 +510,9 @@ if [ -n "$EXISTING_COMMAND" ]; then
 fi
 ```
 
-**Windows (PowerShell)**:
+**Windows (Git Bash / MSYS2 / Cygwin)**: Use the **macOS/Linux** commands above — Git Bash provides `mkdir`, `chmod`, `printf`, etc.
+
+**Windows (PowerShell)** — use only when Shell is `powershell`, `pwsh`, or `cmd` AND `$OSTYPE` is NOT `msys`/`cygwin`:
 ```powershell
 $claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
 $pluginDir = Join-Path $claudeDir "plugins\claude-hud"
@@ -657,7 +667,9 @@ echo "Standalone DEEPSEEK_API_KEY: $([ -n "$DEEPSEEK_KEY" ] && echo 'found' || e
 echo "Standalone ZHIPU_API_KEY: $([ -n "$ZHIPU_KEY" ] && echo 'found' || echo 'missing')"
 ```
 
-**Windows (PowerShell)**:
+**Windows (Git Bash / MSYS2 / Cygwin)**: Use the **macOS/Linux** `node -e '...'` script above — Git Bash provides `node`, `cat`, and the same variable expansion. The `$CLAUDE_CONFIG_DIR` and `$HOME` paths work identically.
+
+**Windows (PowerShell)** — use only when Shell is `powershell`, `pwsh`, or `cmd` AND `$OSTYPE` is NOT `msys`/`cygwin`:
 ```powershell
 $claudeDir = if ($env:CLAUDE_CONFIG_DIR) { $env:CLAUDE_CONFIG_DIR } else { Join-Path $HOME ".claude" }
 $settingsPath = Join-Path $claudeDir "settings.json"
@@ -778,7 +790,7 @@ Add to the existing `plugins/claude-hud/config.json`:
 }
 ```
 
-**macOS/Linux**: Replace `<absolute path>` with `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/usage-snapshot.json` (no `~`).
+**macOS/Linux** (also **Windows + Git Bash**): Replace `<absolute path>` with `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/claude-hud/usage-snapshot.json` (no `~`).
 **Windows (PowerShell)**: Replace `<absolute path>` with `Join-Path $claudeDir "plugins\claude-hud\usage-snapshot.json"` (fully expanded, no `~`).
 
 **4.5d: Update settings.json** (merge with what was written in Step 3)

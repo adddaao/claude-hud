@@ -157,9 +157,11 @@ mkdir -p ~/.cache/tmp && TMPDIR=~/.cache/tmp claude
 /claude-hud:setup
 ```
 
-这个命令会自动完成：
+这个命令会**自动检测平台**（Windows / macOS / Linux）和 Shell 类型，并根据环境自动适配。Windows 用户无需任何额外操作。
 
-1. 检测 JavaScript 运行时（Node.js / Bun）
+它会自动完成：
+
+1. **自动检测平台与运行时** — 识别 Windows / macOS / Linux，以及 Shell 类型（bash / PowerShell / Git Bash）。Windows 下自动使用 `tput cols` 获取终端宽度（而非不兼容的 `stty size`），确保状态栏正确显示
 2. 在 `~/.claude/settings.json` 中写入 `statusLine` 字段，指向当前最新版本的 claude-hud 入口
 3. **自动检测 `ANTHROPIC_BASE_URL`**：如果是 ZhipuAI / DeepSeek 等第三方提供商，会同时安装 fetch 脚本、写入 `externalUsagePath`、注册 PreToolUse hook，一步到位
 4. 引导你选择布局预设和可选元素（工具、Agent、待办等）
@@ -167,9 +169,14 @@ mkdir -p ~/.cache/tmp && TMPDIR=~/.cache/tmp claude
 后续插件升级时无需重新执行 setup——启动脚本会自动定位到最新版本。
 
 <details>
-<summary><strong>⚠️ Windows 用户：如果 setup 提示未找到 JavaScript 运行时，请点击此处</strong></summary>
+<summary><strong>⚠️ Windows 用户：点击查看注意事项</strong></summary>
 
-在 Windows 上，Claude HUD setup 支持的运行时是 Node.js LTS。如果 setup 提示未找到 JavaScript 运行时，请先为你的 shell 安装 Node.js：
+**平台自动检测**：`/claude-hud:setup` 会自动检测 Windows 环境并做适配处理：
+- **Git Bash / MSYS2 / Cygwin**：自动使用 bash 命令 + `tput cols` 获取终端宽度，兼容 Windows 无 `/dev/tty` 的环境
+- **PowerShell / cmd**：自动使用 PowerShell 命令 + `.ps1` wrapper 获取终端宽度
+- **WSL**：自动使用 Linux 路径处理
+
+**运行时要求**：在 Windows 上，Claude HUD setup 支持的运行时是 Node.js LTS。如果 setup 提示未找到 JavaScript 运行时，请先为你的 shell 安装 Node.js：
 ```powershell
 winget install OpenJS.NodeJS.LTS
 ```
