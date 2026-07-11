@@ -161,23 +161,22 @@ echo $OSTYPE
 5. Generate command (quotes around runtime path handle spaces):
 
    The command exports `COLUMNS` so the HUD knows the real terminal width.
-   Claude Code pipes the subprocess stdout, so `process.stdout.columns` is
-   unavailable at runtime. `tput cols` reads the current terminal width
-   and works on all platforms (macOS, Linux, Windows Git Bash).
-   The `- 4` accounts for Claude Code's input area padding
-   (2 columns on each side).
+   Claude Code pipes the subprocess stdout (so `process.stdout.columns` is
+   unavailable) and spawns the statusLine with **no controlling terminal**,
+   so `stty size </dev/tty` fails and `tput cols` silently returns the
+   terminfo default (typically 80). Both leave `COLUMNS` wrong and the HUD
+   wraps early, leaving large trailing gaps on each line.
 
-   Avoid `awk '{print $2}'` from `stty size` output — the `$2` gets eaten
-   by template processing when setup writes settings.json.
-
-   When a TTY file descriptor is available, `tput` queries it via ioctl
-   for the actual terminal size. When no TTY fd exists (piped stdout),
-   `tput` falls back to the `COLUMNS` environment variable, and if that
-   is unset or zero, to the terminfo default (typically 80 for xterm).
-   The `${cols:-120}` fallback handles the case where `tput` fails
-   entirely (e.g. missing terminfo entry). On very wide terminals this
-   may cause earlier wrapping than necessary; users can set a custom
-   `maxWidth` in their HUD config to override.
+   `detect_cols` recovers the real width by walking up the process tree to
+   the nearest ancestor that *does* have a controlling terminal (the PTY /
+   terminal Claude Code renders into) and reading its size with
+   `stty size < /dev/<tty>`. That TTY device is owned by the same user, so it
+   is readable from the subprocess. `${s#* }` strips the rows field from
+   `stty size`'s `ROWS COLS` output (parameter expansion avoids `$2`, which
+   template processing can eat). If no ancestor TTY is found it falls back to
+   120. The `- 4` reserves padding for Claude Code's input area (2 columns
+   each side). On Windows Git Bash the walk is best-effort; `tput cols` is
+   kept there as the fallback.
 
    The grep pattern uses `[[:space:]]` rather than `\t` to match the tab
    separator emitted by awk. GNU grep (BRE/ERE) does **not** interpret
@@ -193,12 +192,12 @@ echo $OSTYPE
 
    **When runtime is bun** - add `--env-file /dev/null` to prevent Bun from auto-loading project `.env` files:
    ```
-   bash -c 'cols=$(tput cols 2>/dev/null); export COLUMNS=$(( ${cols:-120} > 4 ? ${cols:-120} - 4 : 1 )); plugin_dir=$(ls -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-hud/*/ 2>/dev/null | awk -F/ '"'"'{ print $(NF-1) "\t" $(0) }'"'"' | grep -E '"'"'^[0-9]+\.[0-9]+\.[0-9]+[[:space:]]'"'"' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); exec "{RUNTIME_PATH}" --env-file /dev/null "${plugin_dir}{SOURCE}"'
+   bash -c 'detect_cols(){ p=$$; while [ "$p" != 1 ] && [ -n "$p" ]; do t=$(ps -o tty= -p "$p" 2>/dev/null|tr -d " "); case "$t" in ""|*[?]*):;;*) s=$(stty size<"/dev/$t" 2>/dev/null)&&{ echo "${s#* }"; return 0; };;esac; p=$(ps -o ppid= -p "$p" 2>/dev/null|tr -d " "); done; return 1; }; cols=$(detect_cols); export COLUMNS=$(( ${cols:-120} > 4 ? ${cols:-120} - 4 : 1 )); plugin_dir=$(ls -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-hud/*/ 2>/dev/null | awk -F/ '"'"'{ print $(NF-1) "\t" $(0) }'"'"' | grep -E '"'"'^[0-9]+\.[0-9]+\.[0-9]+[[:space:]]'"'"' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); exec "{RUNTIME_PATH}" --env-file /dev/null "${plugin_dir}{SOURCE}"'
    ```
 
    **When runtime is node**:
    ```
-   bash -c 'cols=$(tput cols 2>/dev/null); export COLUMNS=$(( ${cols:-120} > 4 ? ${cols:-120} - 4 : 1 )); plugin_dir=$(ls -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-hud/*/ 2>/dev/null | awk -F/ '"'"'{ print $(NF-1) "\t" $(0) }'"'"' | grep -E '"'"'^[0-9]+\.[0-9]+\.[0-9]+[[:space:]]'"'"' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); exec "{RUNTIME_PATH}" "${plugin_dir}{SOURCE}"'
+   bash -c 'detect_cols(){ p=$$; while [ "$p" != 1 ] && [ -n "$p" ]; do t=$(ps -o tty= -p "$p" 2>/dev/null|tr -d " "); case "$t" in ""|*[?]*):;;*) s=$(stty size<"/dev/$t" 2>/dev/null)&&{ echo "${s#* }"; return 0; };;esac; p=$(ps -o ppid= -p "$p" 2>/dev/null|tr -d " "); done; return 1; }; cols=$(detect_cols); export COLUMNS=$(( ${cols:-120} > 4 ? ${cols:-120} - 4 : 1 )); plugin_dir=$(ls -d "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/plugins/cache/*/claude-hud/*/ 2>/dev/null | awk -F/ '"'"'{ print $(NF-1) "\t" $(0) }'"'"' | grep -E '"'"'^[0-9]+\.[0-9]+\.[0-9]+[[:space:]]'"'"' | sort -t. -k1,1n -k2,2n -k3,3n -k4,4n | tail -1 | cut -f2-); exec "{RUNTIME_PATH}" "${plugin_dir}{SOURCE}"'
    ```
 
 **Windows + Git Bash** (Platform: `win32`, Shell: `bash`):
