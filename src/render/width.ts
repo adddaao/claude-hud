@@ -1,24 +1,27 @@
-import { isCjkLanguage } from '../i18n/index.js';
-
 // CJK terminals render East Asian Ambiguous-width chars (box drawing,
 // block elements, arrows, etc.) as 2 cells. The HUD bar/separator/icon
 // glyphs fall in those ranges, so width math must follow suit when the
 // terminal is in a CJK locale — otherwise wrap calculations under-report
 // visual width and the terminal itself wraps.
 // https://www.unicode.org/reports/tr11/
+//
+// IMPORTANT: geometry must follow the *terminal* locale, not the HUD
+// display language. `language: zh` only selects translation strings; it
+// does NOT mean the terminal renders ambiguous glyphs as wide. Tying the
+// two together (e.g. a zh UI on an en_US Ghostty terminal, which renders
+// ambiguous chars narrow) makes the HUD over-count cell width and wrap
+// lines early, leaving large trailing gaps. So we detect only from the
+// system locale signals below.
 
 function detectCjkTerminal(): boolean {
-  // 1. HUD language explicitly set to CJK
-  if (isCjkLanguage()) return true;
-
-  // 2. Detect system locale via Intl (works on all platforms,
+  // 1. Detect system locale via Intl (works on all platforms,
   //    returns e.g. 'zh-CN' on Chinese Windows regardless of env vars)
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || '';
     if (/^zh|^ja|^ko/i.test(locale)) return true;
   } catch {}
 
-  // 3. Check LANG / LC_* environment variables (Git Bash on Windows, Linux, macOS)
+  // 2. Check LANG / LC_* environment variables (Git Bash on Windows, Linux, macOS)
   const envLang = [process.env.LC_ALL, process.env.LC_CTYPE, process.env.LANG]
     .find(v => v && v.length > 0);
   if (envLang && /zh|ja|ko/i.test(envLang)) return true;

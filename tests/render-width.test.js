@@ -821,7 +821,7 @@ test('separator width accounts for CJK ambiguous-wide dashes so the terminal doe
 });
 
 
-test('width math counts ambiguous chars as 2 cells only in CJK mode', async () => {
+test('width math counts ambiguous chars as 2 cells only on a CJK-locale terminal', async () => {
   const { codePointCellWidth, isAmbiguousWideCodePoint, isCjkAmbiguousWide } =
     await import('../dist/render/width.js');
 
@@ -829,15 +829,23 @@ test('width math counts ambiguous chars as 2 cells only in CJK mode', async () =
   assert.equal(isAmbiguousWideCodePoint(0x2502), true, '│ U+2502 is ambiguous');
   assert.equal(isAmbiguousWideCodePoint(0x0041), false, 'ASCII A is not ambiguous');
 
-  setLanguage('zh');
+  // Geometry follows the TERMINAL locale, not the HUD display language.
+  // A zh UI on an en_US terminal must NOT force ambiguous chars wide.
+  const saved = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, LC_CTYPE: process.env.LC_CTYPE };
   try {
-    assert.equal(isCjkAmbiguousWide(), true);
+    process.env.LC_ALL = ''; process.env.LC_CTYPE = ''; process.env.LANG = 'zh_CN.UTF-8';
+    assert.equal(isCjkAmbiguousWide(), true, 'zh locale terminal renders ambiguous wide');
     assert.equal(codePointCellWidth(0x2588, isCjkAmbiguousWide()), 2);
     assert.equal(codePointCellWidth(0x0041, isCjkAmbiguousWide()), 1);
-  } finally {
-    setLanguage('en');
-  }
 
-  assert.equal(isCjkAmbiguousWide(), false);
-  assert.equal(codePointCellWidth(0x2588, isCjkAmbiguousWide()), 1);
+    process.env.LANG = 'en_US.UTF-8';
+    setLanguage('zh'); // UI language must NOT change geometry
+    assert.equal(isCjkAmbiguousWide(), false, 'en locale renders ambiguous narrow even with zh UI');
+    assert.equal(codePointCellWidth(0x2588, isCjkAmbiguousWide()), 1);
+    setLanguage('en');
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
 });
