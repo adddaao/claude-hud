@@ -122,6 +122,30 @@ Windows 上 **不支持 Bun**，必须用 Node.js。macOS / Linux 上二选一�
 
 这会把 `adddaao/claude-hud` 注册为本地可用的插件来源。
 
+<details>
+<summary><strong>⚠️ Windows 用户：如果添加插件市场时报 EBUSY</strong></summary>
+
+如果看到类似下面的错误：
+
+```text
+EBUSY: resource busy or locked, rm 'C:\Users\renx\.claude\plugins\marketplaces\adddaao-claude-hud'
+```
+
+说明 Claude Code 正在尝试更新本地 marketplace 缓存目录，但该目录仍被某个进程占用。先完全退出所有 Claude Code 窗口、相关终端，以及打开过该目录的资源管理器窗口，然后重新启动 Claude Code 再执行：
+
+```text
+/plugin marketplace add adddaao/claude-hud
+```
+
+如果仍然报 `EBUSY`，重启 Windows 后再执行同一条命令。若你需要保留这份残留缓存以便回滚，不要直接删除；在确认没有进程占用后，可以先改名备份再重试：
+
+```powershell
+$marketplaces = Join-Path $env:USERPROFILE ".claude\plugins\marketplaces"
+Rename-Item -LiteralPath (Join-Path $marketplaces "adddaao-claude-hud") -NewName ("adddaao-claude-hud.bak-" + (Get-Date -Format "yyyyMMddHHmmss"))
+```
+
+</details>
+
 ### 步骤 2：安装插件
 
 <details>
